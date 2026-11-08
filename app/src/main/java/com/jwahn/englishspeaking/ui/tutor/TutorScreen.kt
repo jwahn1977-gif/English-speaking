@@ -80,6 +80,7 @@ fun TutorScreen(nav: Nav) {
     val recent by c.db.tutor().recentConversations(15).collectAsState(initial = emptyList())
     var cat by rememberSaveable { mutableStateOf("ROLEPLAY") }
     var deleteTarget by remember { mutableStateOf<ScenarioEntity?>(null) }
+    var needConnect by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
 
     Screen(
@@ -103,7 +104,7 @@ fun TutorScreen(nav: Nav) {
                 items(list, key = { it.id }) { s ->
                     Card(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { if (settings.subscriptionOnly) scope.launch { com.jwahn.englishspeaking.ui.handoff.startSubscriptionTutor(c, nav, s.id) } else nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
+                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { if (settings.anyConnected) nav.chat(s.id) else needConnect = s.id }, onLongClick = { if (!s.builtin) deleteTarget = s }),
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(s.emoji, fontSize = 32.sp)
@@ -132,6 +133,28 @@ fun TutorScreen(nav: Nav) {
                 }
                 item { Spacer(Modifier.height(88.dp)) }
             }
+    }
+
+    // 앱 안 AI가 없으면 다른 앱으로 자동으로 넘기지 않고 먼저 물어본다
+    needConnect?.let { sid ->
+        AlertDialog(
+            onDismissRequest = { needConnect = null },
+            title = { Text("AI 연결이 필요해요") },
+            text = {
+                Text("AI 선생님과 앱 안에서 바로 대화하려면 무료 Gemini 키를 한 번 연결해 주세요. (설정 → AI 연결 → 맨 위 파란 카드, 1분이면 돼요)" +
+                    if (settings.subscriptionApp.isNotBlank()) "\n\n또는 구독 중인 앱으로 넘겨서 대화할 수도 있어요. (그 앱에서 새 채팅에 붙여넣기)" else "")
+            },
+            confirmButton = { Button(onClick = { needConnect = null; nav.settings() }) { Text("무료로 연결하기") } },
+            dismissButton = {
+                Row {
+                    if (settings.subscriptionApp.isNotBlank()) TextButton(onClick = {
+                        needConnect = null
+                        scope.launch { com.jwahn.englishspeaking.ui.handoff.startSubscriptionTutor(c, nav, sid) }
+                    }) { Text("구독 앱으로 넘기기") }
+                    TextButton(onClick = { needConnect = null }) { Text("닫기") }
+                }
+            },
+        )
     }
 
     deleteTarget?.let { t ->

@@ -389,6 +389,9 @@ class AppSmokeTest {
 
         tab("AI 튜터")
         clickText("카페에서 주문하기")
+        // 앱 안 AI가 없으면 먼저 물어본다 (자동으로 넘기지 않음)
+        waitText("AI 연결이 필요해요")
+        clickText("구독 앱으로 넘기기")
         waitText("Chrome 창에서 열려 있어요", substring = true)
         val url = nextOpenedUrl()
         assertEquals("https://claude.ai/", url) // 미리 채우기 링크 대신 채팅 첫 화면 + 복사
@@ -486,6 +489,7 @@ class AppSmokeTest {
         waitText("Claude 앱으로 넘겨서 사용", substring = true)
         tab("AI 튜터")
         clickText("카페에서 주문하기")
+        clickText("구독 앱으로 넘기기")
         val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
         rule.waitUntil(10_000) {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()

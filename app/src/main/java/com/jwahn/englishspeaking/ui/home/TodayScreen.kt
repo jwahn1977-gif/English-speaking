@@ -84,7 +84,7 @@ fun TodayScreen(nav: Nav) {
 
     Screen("오늘의 공부 10분", onBack = nav::back) { mod ->
         val p = plan ?: return@Screen
-        val speakWithAi = (s.anyConnected || s.subscriptionApp.isNotBlank()) && p.speakScenarioId != null
+        val speakWithAi = s.anyConnected && p.speakScenarioId != null
         data class Step(val id: String, val emoji: String, val title: String, val sub: String, val skip: Boolean, val go: () -> Unit)
         val steps = listOf(
             Step("review", "🔁", "복습하기", if (p.dueWords > 0) "잊기 전에 다시 보기 ${p.dueWords}개" else "오늘 복습할 단어가 없어요",
@@ -93,7 +93,7 @@ fun TodayScreen(nav: Nav) {
                 p.newChapterId == null) { p.newChapterId?.let { nav.study("new", it) } },
             Step("pattern", "🧩", "패턴 말하기", if (p.patternCount > 0) "한국어를 보고 영어로 말하기" else "연습할 패턴이 없어요",
                 p.patternCount == 0) { nav.patternReview() },
-            if (speakWithAi) Step("speak", "🗣️", "AI와 3번 주고받기", p.speakTitle, false) { if (s.subscriptionOnly) scope.launch { com.jwahn.englishspeaking.ui.handoff.startSubscriptionTutor(c, nav, p.speakScenarioId!!) } else nav.chat(p.speakScenarioId!!) }
+            if (speakWithAi) Step("speak", "🗣️", "AI와 3번 주고받기", p.speakTitle, false) { nav.chat(p.speakScenarioId!!) }
             else Step("speak", "💬", "생활 표현 따라 말하기", "AI 없이 통째로 외우는 문장", p.phrasesChapterId == null) {
                 p.phrasesChapterId?.let { nav.study("new", it) }
             },
