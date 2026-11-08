@@ -95,7 +95,7 @@ fun HandoffTutorScreen(nav: Nav, scenarioId: Long) {
                         scope.launch {
                             val kids = sc.category == "KIDS" || s.learner == Learner.KIDS || s.tutorLevel == TutorLevel.KIDS
                             val prompt = HandoffPrompts.tutor(sc, s.levelPrompt(c.db.tutor().usedWordCountOnce()), kids)
-                            openInSubApp(context, app, prompt)
+                            nav.webChat(app, prompt)
                             c.repo.recordActivity(sentences = 1)
                         }
                     },
@@ -156,7 +156,7 @@ private fun StepCard(no: String, title: String, body: String) {
  * prompt: 만들 지시문, onImport: 복사한 결과를 받아 화면에 채운다
  */
 @Composable
-fun SubscriptionGenerate(prompt: () -> String?, onImport: (Imported) -> Unit) {
+fun SubscriptionGenerate(nav: Nav, prompt: () -> String?, onImport: (Imported) -> Unit) {
     val c = LocalContainer.current
     val context = LocalContext.current
     val s by c.settings.state.collectAsState()
@@ -168,13 +168,13 @@ fun SubscriptionGenerate(prompt: () -> String?, onImport: (Imported) -> Unit) {
     ) {
         Column(Modifier.padding(12.dp)) {
             Text("구독 계정으로 만들기", fontWeight = FontWeight.Bold)
-            Text("① 버튼으로 지시문을 보내고 ② 나온 답 전체를 복사해서 ③ 가져오기를 누르세요.",
+            Text("① 보내기를 누르면 앱 안에서 대화가 열려요 ② 답이 나오면 복사 버튼을 누르고 ③ 위쪽 '결과 가져오기'를 누르면 여기로 돌아와요.",
                 style = MaterialTheme.typography.bodySmall)
             SubAppPicker(app) { app = it; c.settings.update { st -> st.copy(subscriptionApp = it.id) } }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
                 Button(onClick = {
                     val p = prompt()
-                    if (p == null) message = "주제를 먼저 적어 주세요." else openInSubApp(context, app, p)
+                    if (p == null) message = "주제를 먼저 적어 주세요." else nav.webChat(app, p, onImport)
                 }) { Text("${app.label}로 보내기") }
                 OutlinedButton(onClick = {
                     val r = parseImported(readClipboard(context), "구독 앱")
@@ -184,4 +184,15 @@ fun SubscriptionGenerate(prompt: () -> String?, onImport: (Imported) -> Unit) {
             message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
     }
+}
+
+/** 구독 계정으로 AI 튜터 바로 시작: 지시문을 만들어 앱 안 대화 화면을 연다 */
+suspend fun startSubscriptionTutor(c: com.jwahn.englishspeaking.AppContainer, nav: Nav, scenarioId: Long) {
+    val sc = c.db.tutor().scenario(scenarioId) ?: return
+    val s = c.settings.current
+    val app = SubApp.of(s.subscriptionApp) ?: SubApp.CLAUDE
+    val kids = sc.category == "KIDS" || s.learner == Learner.KIDS || s.tutorLevel == TutorLevel.KIDS
+    val prompt = HandoffPrompts.tutor(sc, s.levelPrompt(c.db.tutor().usedWordCountOnce()), kids)
+    c.repo.recordActivity(sentences = 1)
+    nav.webChat(app, prompt)
 }

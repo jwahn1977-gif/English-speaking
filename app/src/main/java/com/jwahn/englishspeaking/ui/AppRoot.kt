@@ -101,6 +101,13 @@ class Nav(private val nav: NavHostController) {
     fun feeds() = go { nav.navigate("feeds") }
     fun today() = go { nav.navigate("today") }
     fun handoffTutor(scenarioId: Long) = go { nav.navigate("handoff/$scenarioId") }
+    /** 공식 서비스(Claude·ChatGPT·Gemini)를 앱 안 화면으로 연다. prompt가 없으면 로그인 화면 */
+    fun webChat(app: com.jwahn.englishspeaking.ui.handoff.SubApp, prompt: String? = null,
+                onImport: ((com.jwahn.englishspeaking.ui.handoff.Imported) -> Unit)? = null) {
+        com.jwahn.englishspeaking.ui.handoff.WebChatRequest.prompt = prompt
+        com.jwahn.englishspeaking.ui.handoff.WebChatRequest.onImport = onImport
+        go { nav.navigate("webchat/${app.id}") }
+    }
     fun finishOnboarding() = go {
         nav.navigate("home") { popUpTo("onboarding") { inclusive = true } }
     }
@@ -131,8 +138,11 @@ fun AppRoot(container: AppContainer) {
         ) { pad ->
             val start = remember { if (container.settings.current.onboarded) "home" else "onboarding" }
             NavHost(nav, startDestination = start, modifier = Modifier.padding(pad)) {
-                composable("onboarding") { OnboardingScreen(onDone = n::finishOnboarding) }
+                composable("onboarding") { OnboardingScreen(onDone = n::finishOnboarding, onLogin = { n.webChat(it) }) }
                 composable("today") { TodayScreen(n) }
+                composable("webchat/{app}") { e ->
+                    com.jwahn.englishspeaking.ui.handoff.WebChatScreen(n, e.arguments?.getString("app").orEmpty())
+                }
                 composable("handoff/{sid}", arguments = listOf(navArgument("sid") { type = NavType.LongType })) { e ->
                     com.jwahn.englishspeaking.ui.handoff.HandoffTutorScreen(n, e.arguments!!.getLong("sid"))
                 }

@@ -359,39 +359,48 @@ class AppSmokeTest {
         waitText("웹 로그인으로 연결하기")
     }
 
-    /** 구독 계정(공식 앱)으로: 지시문 넘기기 → 결과 복사 → 가져와서 저장 */
+    /** 구독 계정: 앱 안에서 로그인 → 튜터가 앱 안 대화 화면으로 바로 열림 → 결과 가져와 저장 */
     @Test
-    fun subscription_login_handoff_and_import() {
+    fun subscription_login_in_app_chat_and_import() {
         passOnboarding()
         tab("홈")
         rule.onNodeWithContentDescription("설정").performClick()
         clickText("Claude 로그인")
-        val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
-        assertEquals("https://claude.ai/login", shadowApp.nextStartedActivity?.data?.toString())
+        waitText("처음 한 번 로그인하면", substring = true)
         assertEquals("CLAUDE", container.settings.current.subscriptionApp)
+        val web = org.robolectric.Shadows.shadowOf(findWebView())
+        assertEquals("https://claude.ai/login", web.lastLoadedUrl)
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
 
         tab("AI 튜터")
         clickText("카페에서 주문하기")
-        clickText("Claude에서 대화 시작하기")
-        rule.waitUntil(10_000) {
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            shadowApp.peekNextStartedActivity() != null
-        }
-        val opened = shadowApp.nextStartedActivity?.data?.toString().orEmpty()
-        assertTrue(opened, opened.startsWith("https://claude.ai/new?q="))
+        waitText("수업 지시문이 입력칸에", substring = true)
+        val url = org.robolectric.Shadows.shadowOf(findWebView()).lastLoadedUrl
+        assertTrue(url, url.startsWith("https://claude.ai/new?q=") && url.contains("role-play"))
         val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
         assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("role-play"))
 
-        // Claude가 END 후에 준 마지막 답을 복사했다고 가정
-        val reply = "잘했어요! 고칠 점: ...\n```json\n" +
+        // END 후 마지막 답을 복사했다고 가정
+        val reply = "잘했어요!\n```json\n" +
             "{\"patterns\":[{\"pattern\":\"Could I get ~?\",\"meaning_ko\":\"~ 주실 수 있나요?\",\"example_en\":\"Could I get a latte?\",\"example_ko\":\"라테 주실 수 있나요?\"}]," +
             "\"words\":[{\"word\":\"decaf\",\"ipa\":\"ˈdiːkæf\",\"meaning_ko\":\"디카페인 커피\",\"example_en\":\"A decaf, please.\",\"example_ko\":\"디카페인 주세요.\"}]}\n```"
         rule.activity.runOnUiThread { cm.setPrimaryClip(android.content.ClipData.newPlainText("r", reply)) }
-        clickText("📋 복사한 결과 가져오기")
-        waitText("Could I get ", substring = true)
+        clickText("📋 결과 가져오기")
+        waitText("가져온 결과: 패턴 1 · 단어 1")
         clickText("모두 저장")
         rule.waitUntil(10_000) { runBlocking { container.db.patterns().byTemplate("Could I get ~?") != null } }
         runBlocking { assertNotNull(container.db.vocab().findWord("decaf")) }
+    }
+
+    private fun findWebView(): android.webkit.WebView {
+        fun search(v: android.view.View): android.webkit.WebView? = when (v) {
+            is android.webkit.WebView -> v
+            is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { search(v.getChildAt(it)) }
+            else -> null
+        }
+        var found: android.webkit.WebView? = null
+        rule.waitUntil(10_000) { found = search(rule.activity.window.decorView); found != null }
+        return found!!
     }
 }

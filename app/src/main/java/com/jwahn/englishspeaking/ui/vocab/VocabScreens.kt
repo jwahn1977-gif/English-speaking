@@ -303,6 +303,7 @@ fun WordGenScreen(nav: Nav) {
                 val st by c.settings.state.collectAsState()
                 if (st.subscriptionApp.isNotBlank()) {
                     com.jwahn.englishspeaking.ui.handoff.SubscriptionGenerate(
+                        nav = nav,
                         prompt = { if (topic.isBlank()) null else Prompts.wordSet(topic, count, levelMap.getValue(level)) },
                         onImport = { im -> words = im.words; title = im.title.ifBlank { topic }; error = null },
                     )

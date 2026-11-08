@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.jwahn.englishspeaking.AppContainer
 import com.jwahn.englishspeaking.data.settings.AppSettings
 import com.jwahn.englishspeaking.data.settings.Learner
@@ -77,6 +78,7 @@ fun TodayScreen(nav: Nav) {
     val c = LocalContainer.current
     val s by c.settings.state.collectAsState()
     val done by c.settings.todayDone.collectAsState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(Unit) { c.settings.refreshToday() }
     val plan by produceState<TodayPlan?>(null, done) { value = buildTodayPlan(c, s) }
 
@@ -91,7 +93,7 @@ fun TodayScreen(nav: Nav) {
                 p.newChapterId == null) { p.newChapterId?.let { nav.study("new", it) } },
             Step("pattern", "🧩", "패턴 말하기", if (p.patternCount > 0) "한국어를 보고 영어로 말하기" else "연습할 패턴이 없어요",
                 p.patternCount == 0) { nav.patternReview() },
-            if (speakWithAi) Step("speak", "🗣️", "AI와 3번 주고받기", p.speakTitle, false) { if (s.subscriptionOnly) nav.handoffTutor(p.speakScenarioId!!) else nav.chat(p.speakScenarioId!!) }
+            if (speakWithAi) Step("speak", "🗣️", "AI와 3번 주고받기", p.speakTitle, false) { if (s.subscriptionOnly) scope.launch { com.jwahn.englishspeaking.ui.handoff.startSubscriptionTutor(c, nav, p.speakScenarioId!!) } else nav.chat(p.speakScenarioId!!) }
             else Step("speak", "💬", "생활 표현 따라 말하기", "AI 없이 통째로 외우는 문장", p.phrasesChapterId == null) {
                 p.phrasesChapterId?.let { nav.study("new", it) }
             },

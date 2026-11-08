@@ -163,7 +163,7 @@ fun WebKeyButton(link: String, onOpened: () -> Unit) {
  * 공식 앱/사이트에 로그인해 두면, 앱이 수업 지시문을 그쪽으로 넘기고 결과를 복사해 가져온다.
  */
 @Composable
-fun SubscriptionLoginCard() {
+fun SubscriptionLoginCard(onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp) -> Unit)? = null) {
     val c = LocalContainer.current
     val s by c.settings.state.collectAsState()
     val context = LocalContext.current
@@ -172,9 +172,9 @@ fun SubscriptionLoginCard() {
         Column(Modifier.padding(16.dp)) {
             Text("구독 계정으로 로그인 (Claude · ChatGPT · Gemini)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "이미 쓰는 Claude Pro, ChatGPT Plus, Gemini 계정으로 공부해요. 아래에서 로그인해 두면, AI 튜터와 단어·패턴 만들기를 누를 때 " +
-                    "그 앱으로 수업 지시문을 넘겨 줘요. 결과는 복사해서 가져오면 복습에 들어가요. 추가 요금이 없어요.\n" +
-                    "※ 각 회사가 구독 계정을 다른 앱의 AI 엔진으로 쓰는 것을 허용하지 않아, 대화는 공식 앱에서 해요.",
+                "이미 쓰는 Claude Pro, ChatGPT Plus, Gemini 계정으로 공부해요. 아래 버튼을 누르면 앱 안에서 로그인 화면이 열려요. 한 번 로그인하면 계속 유지돼요.\n" +
+                    "AI 튜터와 단어·패턴 만들기를 누르면 앱 안에서 바로 그 서비스와 대화가 시작되고, 수업 지시문이 자동으로 들어가요. 추가 요금이 없어요.\n" +
+                    "※ 각 회사가 구독 계정을 다른 앱의 AI 엔진으로 쓰는 것을 허용하지 않아, 대화는 그 서비스 화면에서 하고 결과는 '결과 가져오기'로 저장해요.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(8.dp))
@@ -184,7 +184,7 @@ fun SubscriptionLoginCard() {
                     Button(
                         onClick = {
                             c.settings.update { it.copy(subscriptionApp = app.id) }
-                            openUrl(context, app.loginUrl)
+                            if (onLogin != null) onLogin(app) else openUrl(context, app.loginUrl)
                         },
                         modifier = Modifier.weight(1f),
                     ) { Text("${app.label} 로그인") }

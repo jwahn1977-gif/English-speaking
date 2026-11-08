@@ -49,7 +49,7 @@ private val goals = listOf(
 
 /** 첫 실행 안내: 누가 쓰는지, 목표, 글자 크기·속도, AI 연결(선택) */
 @Composable
-fun OnboardingScreen(onDone: () -> Unit) {
+fun OnboardingScreen(onDone: () -> Unit, onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp) -> Unit)? = null) {
     val c = LocalContainer.current
     val s by c.settings.state.collectAsState()
     var step by rememberSaveable { mutableIntStateOf(0) }
@@ -123,7 +123,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             else -> {
                 Text("AI 선생님 연결 (선택)", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text("AI를 연결하면 대화 연습, 단어·패턴 만들기, 뉴스 번역을 쓸 수 있어요. 왕초보 과정, 단어장, 복습은 연결하지 않아도 돼요.")
-                com.jwahn.englishspeaking.ui.settings.SubscriptionLoginCard()
+                com.jwahn.englishspeaking.ui.settings.SubscriptionLoginCard(onLogin)
                 OpenRouterLoginCard()
                 Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("회사별 키로 직접 연결하려면 나중에 설정 > AI 연결에서 할 수 있어요.",

@@ -275,6 +275,7 @@ fun PatternGenScreen(nav: Nav) {
                 val st by c.settings.state.collectAsState()
                 if (st.subscriptionApp.isNotBlank()) {
                     com.jwahn.englishspeaking.ui.handoff.SubscriptionGenerate(
+                        nav = nav,
                         prompt = { if (topic.isBlank()) null else Prompts.patternSet(topic, count, levelMap.getValue(level)) },
                         onImport = { im -> drafts = im.patterns; savedAll = false; error = null },
                     )

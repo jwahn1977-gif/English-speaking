@@ -103,7 +103,7 @@ fun TutorScreen(nav: Nav) {
                 items(list, key = { it.id }) { s ->
                     Card(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { if (settings.subscriptionOnly) nav.handoffTutor(s.id) else nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
+                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { if (settings.subscriptionOnly) scope.launch { com.jwahn.englishspeaking.ui.handoff.startSubscriptionTutor(c, nav, s.id) } else nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(s.emoji, fontSize = 32.sp)
