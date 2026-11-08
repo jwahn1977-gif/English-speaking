@@ -386,9 +386,9 @@ class AppSmokeTest {
         clickText("카페에서 주문하기")
         waitText("Chrome 창에서 열려 있어요", substring = true)
         val url = nextOpenedUrl()
-        assertTrue(url, url.startsWith("https://claude.ai/new?q=") && url.contains("role-play"))
+        assertTrue(url, url.startsWith("https://claude.ai/new?q=") && url.contains("Role-play"))
         val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
-        assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("role-play"))
+        assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("말해요 영어"))
 
         val reply = "잘했어요!\n```json\n" +
             "{\"patterns\":[{\"pattern\":\"Could I get ~?\",\"meaning_ko\":\"~ 주실 수 있나요?\",\"example_en\":\"Could I get a latte?\",\"example_ko\":\"라테 주실 수 있나요?\"}]," +

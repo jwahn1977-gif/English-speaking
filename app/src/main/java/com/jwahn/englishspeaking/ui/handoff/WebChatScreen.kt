@@ -89,7 +89,13 @@ fun WebChatScreen(nav: Nav, appId: String) {
     var googleBlocked by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(external) {
-        if (external) { prompt?.let { copyText(context, it) }; openInChrome(context, startUrl) }
+        if (external) {
+            prompt?.let {
+                copyText(context, it)
+                Toast.makeText(context, "수업 지시문이 들어가요. 빨간 경고가 보여도 보내기(↑)를 누르세요.", Toast.LENGTH_LONG).show()
+            }
+            openInChrome(context, startUrl)
+        }
     }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -211,6 +217,10 @@ fun WebChatScreen(nav: Nav, appId: String) {
                     Text("🌐 ${app.label}는 Chrome 창에서 열려 있어요", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     Text("Chrome에서 로그인하면 다음부터는 바로 열려요(구글 계정 로그인 가능). 대화가 끝나면 마지막 답을 복사하고 이 화면으로 돌아와 위의 '결과 가져오기'를 누르세요.",
                         style = MaterialTheme.typography.bodyMedium)
+                    if (prompt != null) Text(
+                        "💡 Claude 앱에서 빨간 '주의하세요' 경고가 보여도 괜찮아요. 이 앱이 넣은 수업 지시문이라 안전해요. 주황색 ↑(보내기)를 누르면 수업이 시작돼요.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
+                    )
                     Button(onClick = { prompt?.let { copyText(context, it) }; openInChrome(context, startUrl) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         Text("Chrome에서 ${app.label} 다시 열기")
                     }

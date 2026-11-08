@@ -71,24 +71,16 @@ fun openInSubApp(context: Context, app: SubApp, prompt: String) = onMain {
 
 object HandoffPrompts {
     private const val RESULT_JSON =
-        """{"patterns":[{"pattern":"I'd like ~","meaning_ko":"~ 주세요","example_en":"...","example_ko":"..."}],"words":[{"word":"...","ipa":"...","meaning_ko":"...","example_en":"...","example_ko":"..."}]}"""
+        """{"patterns":[{"pattern","meaning_ko","example_en","example_ko"}],"words":[{"word","ipa","meaning_ko","example_en","example_ko"}]} (3-5 patterns, up to 5 words)"""
 
     fun tutor(s: ScenarioEntity, level: String, kids: Boolean): String = """
-Let's do an English speaking role-play. I am a Korean learner.
-You are ${s.persona}. Scenario: ${s.title}. ${s.goal}
-My level: $level. Match your words and sentence length to my level.
-My missions: ${s.missions.lines().filter { it.isNotBlank() }.joinToString(" / ")}
+📚 [말해요 영어] 영어 말하기 수업 지시문이에요. 그대로 보내기(↑)를 누르세요.
 
-Rules:
-- Stay in character. Reply in 1-3 short sentences and usually end with a question.
-- If my message has a mistake or is in Korean, first write "✏️ Better: <natural English>" with a short Korean explanation, then reply in character.
-- After each reply, add "💡 You can say:" with 2 easy example answers for me.
-${if (kids) "- I am a child. Use very simple words, be warm, and never ask for personal information." else ""}
-- When I type END: give feedback in Korean (잘한 점, 고칠 점), then output one JSON code block exactly in this shape:
-$RESULT_JSON
-(3-5 useful patterns from our conversation, up to 5 key words)
-
-Start now with a short greeting in character.
+Role-play with me (Korean English learner). You are ${s.persona}. Scenario: ${s.title}. ${s.goal}
+My level: $level. My missions: ${s.missions.lines().filter { it.isNotBlank() }.joinToString(" / ")}
+Rules: stay in character, 1-3 short sentences, end with a question. If I make a mistake or write Korean, first write "✏️ Better: ..." with a short Korean note. Then add "💡 You can say:" with 2 easy answers.${if (kids) " I am a child: very simple words, never ask personal info." else ""}
+When I type END: give Korean feedback, then one JSON code block: $RESULT_JSON
+Start now with a short greeting.
 """.trimIndent()
 
     const val TUTOR_END = "END"
