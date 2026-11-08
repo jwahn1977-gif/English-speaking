@@ -2,6 +2,7 @@ package com.jwahn.englishspeaking.data
 
 import androidx.room.withTransaction
 import com.jwahn.englishspeaking.data.db.AppDatabase
+import com.jwahn.englishspeaking.data.db.BeginnerSeed
 import com.jwahn.englishspeaking.data.db.ChapterEntity
 import com.jwahn.englishspeaking.data.db.DailyStatEntity
 import com.jwahn.englishspeaking.data.db.NewsFeedEntity
@@ -99,6 +100,15 @@ class Repo(val db: AppDatabase) {
                 }
                 Seed.patterns.forEach { p ->
                     savePattern(PatternDraft(p.template, p.meaning, p.examples, p.category), source = "builtin")
+                }
+            }
+        }
+        // 왕초보 과정 (v0.3에 추가, 기존 사용자에게도 넣는다)
+        if (db.vocab().chapterCountBySource("beginner") == 0) {
+            db.withTransaction {
+                BeginnerSeed.all().forEach { (c, words) ->
+                    val id = db.vocab().insertChapter(c)
+                    db.vocab().insertWords(words.map { it.copy(chapterId = id) })
                 }
             }
         }

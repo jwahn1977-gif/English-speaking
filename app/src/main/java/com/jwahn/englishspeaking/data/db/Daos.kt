@@ -18,6 +18,8 @@ data class ChapterStat(
     val memorized: Int,
     val boxSum: Int,
     val best: Int,
+    val level: Int,
+    val emoji: String,
 ) {
     /** 암기율: 상자 3 이상 비율 */
     val memorizeRate: Int get() = if (total == 0) 0 else memorized * 100 / total
@@ -57,9 +59,10 @@ interface VocabDao {
                COALESCE(SUM(CASE WHEN w.box > 0 THEN 1 ELSE 0 END), 0) AS studied,
                COALESCE(SUM(CASE WHEN w.box >= 3 THEN 1 ELSE 0 END), 0) AS memorized,
                COALESCE(SUM(w.box), 0) AS boxSum,
-               COALESCE(MAX(w.bestScore), 0) AS best
+               COALESCE(MAX(w.bestScore), 0) AS best,
+               c.level AS level, c.emoji AS emoji
         FROM chapter c LEFT JOIN word w ON w.chapterId = c.id
-        GROUP BY c.id ORDER BY c.id
+        GROUP BY c.id ORDER BY c.level, c.id
         """
     )
     fun chapterStats(): Flow<List<ChapterStat>>
@@ -84,6 +87,22 @@ interface VocabDao {
 
     @Query("SELECT * FROM word WHERE chapterId = :chapterId ORDER BY id")
     suspend fun wordsOfChapterOnce(chapterId: Long): List<WordEntity>
+
+    @Query("SELECT COUNT(*) FROM chapter WHERE source = :source")
+    suspend fun chapterCountBySource(source: String): Int
+
+    /** 아직 학습하지 않은 단어가 남은 첫 챕터 (레벨 이하) */
+    @Query(
+        """
+        SELECT c.* FROM chapter c WHERE c.level <= :maxLevel AND EXISTS
+          (SELECT 1 FROM word w WHERE w.chapterId = c.id AND w.box = 0)
+        ORDER BY c.level, c.id LIMIT 1
+        """
+    )
+    suspend fun nextChapterToLearn(maxLevel: Int): ChapterEntity?
+
+    @Query("SELECT * FROM word WHERE chapterId = :chapterId AND box = 0 ORDER BY id LIMIT :limit")
+    suspend fun newWords(chapterId: Long, limit: Int): List<WordEntity>
 
     @Query("SELECT * FROM word WHERE bookmarked = 1 ORDER BY id")
     suspend fun bookmarkedWords(): List<WordEntity>
@@ -177,6 +196,9 @@ interface TutorDao {
 
     @Query("SELECT * FROM scenario ORDER BY builtin DESC, id")
     fun scenarios(): Flow<List<ScenarioEntity>>
+
+    @Query("SELECT * FROM scenario ORDER BY id")
+    suspend fun allScenarios(): List<ScenarioEntity>
 
     @Query("SELECT * FROM scenario WHERE builtin = 0 ORDER BY id")
     suspend fun customScenarios(): List<ScenarioEntity>

@@ -164,7 +164,7 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
                                         if (current) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                         RoundedCornerShape(10.dp),
                                     )
-                                    .clickable { if (mine) player.seek(i, autoplay = true) }
+                                    .clickable(onClickLabel = "이 문장부터 듣기") { if (mine) player.seek(i, autoplay = true) }
                                     .padding(10.dp),
                             ) {
                                 Row(verticalAlignment = Alignment.Top) {
@@ -179,8 +179,8 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
                                         if (showKo && s.ko.isNotBlank()) Text(s.ko, style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(onClick = { player.pause(); shadowIdx = i; spoken = null; speech("en-US", s.en) }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.Default.Mic, "따라 말하기")
+                                    IconButton(onClick = { player.pause(); shadowIdx = i; spoken = null; speech("en-US", s.en) }, modifier = Modifier.size(48.dp)) {
+                                        Icon(Icons.Default.Mic, "이 문장 따라 말하기")
                                     }
                                 }
                                 spoken?.takeIf { it.first == i }?.let { SpokenResult(s.en, it.second) }

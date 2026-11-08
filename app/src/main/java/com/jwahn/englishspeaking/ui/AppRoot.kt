@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -31,6 +32,8 @@ import androidx.navigation.navArgument
 import com.jwahn.englishspeaking.AppContainer
 import com.jwahn.englishspeaking.ui.common.LocalContainer
 import com.jwahn.englishspeaking.ui.home.HomeScreen
+import com.jwahn.englishspeaking.ui.home.OnboardingScreen
+import com.jwahn.englishspeaking.ui.home.TodayScreen
 import com.jwahn.englishspeaking.ui.news.FeedsScreen
 import com.jwahn.englishspeaking.ui.news.NewsLessonScreen
 import com.jwahn.englishspeaking.ui.news.NewsPrepareScreen
@@ -71,7 +74,7 @@ class Nav(private val nav: NavHostController) {
     fun back() = go { nav.popBackStack() }
     fun tab(route: String) = go {
         nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            popUpTo("home") { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
@@ -96,6 +99,10 @@ class Nav(private val nav: NavHostController) {
         }
     }
     fun feeds() = go { nav.navigate("feeds") }
+    fun today() = go { nav.navigate("today") }
+    fun finishOnboarding() = go {
+        nav.navigate("home") { popUpTo("onboarding") { inclusive = true } }
+    }
 }
 
 @Composable
@@ -121,7 +128,10 @@ fun AppRoot(container: AppContainer) {
             },
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         ) { pad ->
-            NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
+            val start = remember { if (container.settings.current.onboarded) "home" else "onboarding" }
+            NavHost(nav, startDestination = start, modifier = Modifier.padding(pad)) {
+                composable("onboarding") { OnboardingScreen(onDone = n::finishOnboarding) }
+                composable("today") { TodayScreen(n) }
                 composable("home") { HomeScreen(n) }
                 composable("tutor") { TutorScreen(n) }
                 composable("vocab") { VocabScreen(n) }

@@ -58,7 +58,7 @@ import com.jwahn.englishspeaking.data.db.NewsFeedEntity
 import com.jwahn.englishspeaking.data.db.NewsLessonEntity
 import com.jwahn.englishspeaking.data.llm.Prompts
 import com.jwahn.englishspeaking.data.news.NewsItem
-import com.jwahn.englishspeaking.data.settings.TutorLevel
+import com.jwahn.englishspeaking.data.settings.levelPrompt
 import com.jwahn.englishspeaking.domain.JsonText
 import com.jwahn.englishspeaking.domain.Levels
 import com.jwahn.englishspeaking.domain.Sentences
@@ -157,7 +157,7 @@ fun NewsScreen(nav: Nav) {
                         st.error?.let { ErrorCard(it, onRetry = { vm.load(st.selected, true) }) }
                     }
                     items(st.items, key = { it.link }) { n ->
-                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { nav.newsPrepare(n.link, n.title) }) {
+                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClickLabel = "이 기사 듣기") { nav.newsPrepare(n.link, n.title) }) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(n.title, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
                                 if (n.description.isNotBlank()) Text(n.description, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -181,7 +181,7 @@ fun NewsScreen(nav: Nav) {
 private fun LessonRow(l: NewsLessonEntity, onOpen: () -> Unit) {
     val c = LocalContainer.current
     val scope = rememberCoroutineScope()
-    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onOpen)) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClickLabel = "다시 듣기", onClick = onOpen)) {
         Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
                 Text(l.title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -204,7 +204,8 @@ fun NewsPrepareScreen(nav: Nav, url: String, title: String) {
     var text by rememberSaveable { mutableStateOf("") }
     var fetching by remember { mutableStateOf(!paste) }
     var error by remember { mutableStateOf<String?>(null) }
-    var mode by rememberSaveable { mutableStateOf("ORIGINAL") }
+    // 초보는 쉬운 영어로 다시 쓴 기사가 기본
+    var mode by rememberSaveable { mutableStateOf(if (settings.isBeginner) "EASY" else "ORIGINAL") }
     var building by remember { mutableStateOf(false) }
 
     LaunchedEffect(url) {
@@ -252,13 +253,7 @@ fun NewsPrepareScreen(nav: Nav, url: String, title: String) {
                         if (cached != null) { building = false; nav.newsLesson(cached.id, replace = true); return@launch }
                         runCatching {
                             val json = if (settings.anyConnected) {
-                                val level = when (settings.tutorLevel) {
-                                    TutorLevel.AUTO -> Levels.of(c.db.tutor().usedWordCountOnce()).prompt
-                                    TutorLevel.KIDS -> "a child learner, very easy"
-                                    TutorLevel.BEGINNER -> "beginner (A2)"
-                                    TutorLevel.INTERMEDIATE -> "intermediate (B1-B2)"
-                                    TutorLevel.ADVANCED -> "advanced (C1)"
-                                }
+                                val level = settings.levelPrompt(c.db.tutor().usedWordCountOnce())
                                 c.llm.quickJson(Prompts.newsLesson(text.take(7000), mode, level), 7000).toString()
                             } else {
                                 val sentences = Sentences.split(text).take(30)
@@ -355,7 +350,7 @@ fun NowPlayingBar(onOpen: (Long) -> Unit) {
     val ps by player.state.collectAsState()
     if (!ps.active) return
     Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(ps.lessonId) },
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClickLabel = "듣는 기사 열기") { onOpen(ps.lessonId) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {

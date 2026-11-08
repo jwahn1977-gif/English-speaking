@@ -77,4 +77,17 @@ class LearningTest {
         assertEquals(3, s.size)
         assertTrue(s[0].startsWith("Mr. Kim"))
     }
+
+    @Test fun requeue_puts_wrong_card_three_later_at_most_twice() {
+        val list = listOf("a", "b", "c", "d", "e")
+        val again = Requeue.again(list, 0) { 0 }
+        assertEquals(listOf("a", "b", "c", "d", "a", "e"), again)
+        assertEquals(listOf("a", "b", "a"), Requeue.again(listOf("a", "b"), 0) { 0 })
+        assertEquals(list, Requeue.again(list, 0) { 2 })
+    }
+
+    @Test fun levels_have_cefr_and_can_do() {
+        Levels.all.forEach { assertTrue(it.cefr.isNotBlank() && it.canDo.isNotBlank()) }
+        assertEquals("Pre-A1", Levels.of(0).cefr)
+    }
 }

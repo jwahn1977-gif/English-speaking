@@ -8,6 +8,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -24,7 +27,7 @@ private val Dark = darkColorScheme(
 )
 
 @Composable
-fun AppTheme(content: @Composable () -> Unit) {
+fun AppTheme(fontScale: Float = 1f, content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val scheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
@@ -33,5 +36,9 @@ fun AppTheme(content: @Composable () -> Unit) {
         dark -> Dark
         else -> Light
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    // 앱 안의 글자 크기 설정(보통/크게/아주 크게)을 시스템 글자 크기 위에 곱한다
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * fontScale)) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
 }

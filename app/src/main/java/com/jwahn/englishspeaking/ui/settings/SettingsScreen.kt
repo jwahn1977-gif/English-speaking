@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +41,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,14 +114,27 @@ fun SettingsScreen(nav: Nav) {
                 label = { Text("이름(닉네임) – AI 튜터가 불러줘요") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
 
+            SectionTitle("가족 프로필")
+            ProfileSection()
+
             SectionTitle("AI 연결")
-            Text(
-                "각 회사의 API 키를 입력하면 바로 사용할 수 있어요. 키는 이 폰 안에만 암호화되어 저장되고, 백업 파일에도 들어가지 않아요. 가족이 각자 폰에 설치해서 같은 키를 넣어도 됩니다.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OpenRouterLoginCard()
+            if (s.hasKey(Provider.OPENROUTER)) ProviderCard(Provider.OPENROUTER, "")
+            var advanced by remember { mutableStateOf(s.connectedProviders.any { it != Provider.OPENROUTER }) }
+            TextButton(onClick = { advanced = !advanced }) {
+                Text((if (advanced) "▲ " else "▼ ") + "회사별 키로 직접 연결 (Claude · ChatGPT · Gemini)")
+            }
+            if (advanced) {
+                Text(
+                    "구독(Pro, Plus) 계정은 다른 앱에 연결할 수 없어서 각 회사의 API 키가 필요해요. '웹에서 로그인하고 키 받기'를 누르고, 만든 키를 복사해서 돌아오면 자동으로 채워져요. 키는 이 폰에만 암호화되어 저장되고, 백업 파일에도 들어가지 않아요.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Provider.entries.filter { it != Provider.OPENROUTER }.forEach { p -> ProviderCard(p, keyLinks.getValue(p)) }
+            }
             Spacer(Modifier.height(8.dp))
             Text("기본으로 쓸 AI", fontWeight = FontWeight.SemiBold)
-            Provider.entries.forEach { p ->
+            Provider.entries.filter { s.hasKey(it) || it == s.defaultProvider }.forEach { p ->
                 Row(
                     Modifier.fillMaxWidth().clickable { c.settings.update { it.copy(defaultProvider = p) } },
                     verticalAlignment = Alignment.CenterVertically,
@@ -128,7 +143,11 @@ fun SettingsScreen(nav: Nav) {
                     Text(p.label + if (s.hasKey(p)) "  ✅" else "")
                 }
             }
-            Provider.entries.forEach { p -> ProviderCard(p, keyLinks.getValue(p)) }
+            SectionTitle("AI 사용량")
+            UsageSection()
+
+            SectionTitle("보기 · 듣기")
+            DisplaySection()
 
             SectionTitle("학습 설정")
             Text("읽기 속도: ${"%.1f".format(s.ttsRate)}배")
@@ -191,14 +210,20 @@ private fun ProviderCard(p: Provider, link: String) {
     var result by remember { mutableStateOf<String?>(null) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var menu by remember { mutableStateOf(false) }
+    var waitingKey by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("") }
+    ClipboardKeyWatcher(p, waitingKey && key.isBlank()) { k ->
+        key = k; waitingKey = false
+        c.settings.update { it.copy(keys = it.keys + (p to k)) }
+    }
 
     Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(p.label, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { uri.openUri(link) }) { Text("키 발급받기") }
+                Text(if (p == Provider.OPENROUTER) "OpenRouter 모델 고르기" else p.label, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             }
-            OutlinedTextField(
+            if (p != Provider.OPENROUTER && key.isBlank()) WebKeyButton(link) { waitingKey = true }
+            if (p != Provider.OPENROUTER) OutlinedTextField(
                 value = key,
                 onValueChange = { v -> key = v.trim(); c.settings.update { it.copy(keys = it.keys + (p to v.trim())) } },
                 label = { Text("API 키") }, placeholder = { Text(p.keyHint) }, singleLine = true,
@@ -219,8 +244,15 @@ private fun ProviderCard(p: Provider, link: String) {
                     label = { Text("모델 (비우면 기본값: ${p.defaultModel})") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (p == Provider.OPENROUTER && models.isNotEmpty()) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("" to "전체", "anthropic/" to "Claude", "openai/" to "GPT", "google/" to "Gemini", ":free" to "무료").forEach { (k, label) ->
+                            FilterChip(filter == k, { filter = k; menu = true }, { Text(label) })
+                        }
+                    }
+                }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    models.take(60).forEach { m ->
+                    models.filter { filter.isBlank() || it.contains(filter) }.take(80).forEach { m ->
                         DropdownMenuItem(text = { Text(m) }, onClick = {
                             model = m; menu = false
                             c.settings.update { it.copy(models = it.models + (p to m)) }
@@ -284,4 +316,128 @@ private fun ReminderSection() {
         Text("복습할 단어·패턴이 있거나 오늘 아직 공부를 안 했을 때만 알려줘요.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+@Composable
+private fun ProfileSection() {
+    val c = LocalContainer.current
+    val profiles by c.profiles.list.collectAsState()
+    val activity = LocalContext.current as? android.app.Activity
+    var adding by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var emoji by remember { mutableStateOf("🧒") }
+    var removeTarget by remember { mutableStateOf<com.jwahn.englishspeaking.data.settings.Profile?>(null) }
+    Text(
+        "한 폰을 가족이 함께 쓸 때 사람마다 학습 기록·레벨·설정을 따로 저장해요. AI 연결은 함께 씁니다.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    profiles.forEach { p ->
+        val current = p.id == c.profileId
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(onClickLabel = "${p.name} 프로필로 바꾸기", enabled = !current) {
+                    activity?.let { com.jwahn.englishspeaking.MainActivity.switchProfile(it, p.id) }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = current, onClick = null)
+            Text("${p.emoji} ${p.name}" + if (current) " (지금 사용 중)" else "", Modifier.weight(1f))
+            if (p.id != "default") TextButton(onClick = { removeTarget = p }) { Text("삭제") }
+        }
+    }
+    if (adding) {
+        OutlinedTextField(name, { name = it }, label = { Text("이름 (예: 민준)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("🧒", "👧", "👦", "👩", "👨", "👵", "👴", "🐶", "🐱", "🦁").forEach { e ->
+                FilterChip(emoji == e, { emoji = e }, { Text(e) })
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = name.isNotBlank(), onClick = {
+                val p = c.profiles.add(name, emoji)
+                adding = false; name = ""
+                activity?.let { com.jwahn.englishspeaking.MainActivity.switchProfile(it, p.id) }
+            }) { Text("만들고 바꾸기") }
+            TextButton(onClick = { adding = false }) { Text("취소") }
+        }
+    } else {
+        OutlinedButton(onClick = { adding = true }) { Text("+ 가족 프로필 추가") }
+    }
+    removeTarget?.let { t ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removeTarget = null },
+            title = { Text("프로필 삭제") },
+            text = { Text("'${t.name}'의 학습 기록과 설정이 모두 지워져요. 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ctx = activity ?: return@TextButton
+                    if (t.id == c.profileId) com.jwahn.englishspeaking.MainActivity.switchProfile(ctx, "default")
+                    c.profiles.remove(ctx, t.id); removeTarget = null
+                }) { Text("삭제") }
+            },
+            dismissButton = { TextButton(onClick = { removeTarget = null }) { Text("취소") } },
+        )
+    }
+}
+
+@Composable
+private fun UsageSection() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    val u by c.settings.usage.collectAsState()
+    LaunchedEffect(Unit) { c.settings.refreshUsage() }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("오늘: AI 사용 ${u.todayCalls}회 · 약 ${"%,d".format(u.todayTokens)} 토큰")
+            Text("이번 달: ${u.monthCalls}회 · 약 ${"%,d".format(u.monthTokens)} 토큰", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "토큰은 AI가 읽고 쓴 글자 양이에요. 요금은 고른 AI와 모델에 따라 다르며, 정확한 금액은 각 회사 사이트에서 확인하세요.",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text("하루 AI 사용 한도: " + if (s.dailyAiLimit == 0) "제한 없음" else "${s.dailyAiLimit}회", fontWeight = FontWeight.SemiBold)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(0, 20, 50, 100, 200).forEach { n ->
+            FilterChip(s.dailyAiLimit == n, { c.settings.update { it.copy(dailyAiLimit = n) } }, { Text(if (n == 0) "없음" else "${n}회") })
+        }
+    }
+    Text("아이 프로필에 한도를 두면 요금 걱정 없이 쓰게 할 수 있어요. 대화 한 번 주고받기가 1회예요.",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun DisplaySection() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    Text("글자 크기", fontWeight = FontWeight.SemiBold)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(1.0f to "보통", 1.2f to "크게", 1.4f to "아주 크게").forEach { (v, label) ->
+            FilterChip(s.fontScale == v, { c.settings.update { it.copy(fontScale = v) } }, { Text(label) })
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text("영어 목소리", fontWeight = FontWeight.SemiBold)
+    var voices by remember { mutableStateOf(c.tts.englishVoices()) }
+    var open by remember { mutableStateOf(false) }
+    val currentLabel = voices.firstOrNull { it.name == s.ttsVoice }?.label ?: "기기 기본 목소리"
+    Column {
+        OutlinedButton(onClick = { voices = c.tts.englishVoices(); open = true }) { Text(currentLabel) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("기기 기본 목소리") }, onClick = {
+                c.settings.update { it.copy(ttsVoice = "") }; open = false
+            })
+            voices.take(40).forEach { v ->
+                DropdownMenuItem(text = { Text(v.label) }, onClick = {
+                    c.settings.update { it.copy(ttsVoice = v.name) }; open = false
+                    c.tts.speak("Hello! I will read English for you.")
+                })
+            }
+        }
+    }
+    Text("목소리가 적으면 휴대폰 설정 > 텍스트 음성 변환에서 Google 음성 데이터(영어)를 받으면 더 자연스러운 목소리가 생겨요.",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    SwitchRow("대화할 때 예시 답변 보여주기", s.showSuggestions) { v -> c.settings.update { it.copy(showSuggestions = v) } }
+    SwitchRow("소리 없이 공부하기 (듣기 문제를 글자로)", s.silentMode) { v -> c.settings.update { it.copy(silentMode = v) } }
 }

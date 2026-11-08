@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +27,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,10 +45,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jwahn.englishspeaking.data.db.WordEntity
 import com.jwahn.englishspeaking.domain.SpeechScore
+import com.jwahn.englishspeaking.domain.Requeue
 import com.jwahn.englishspeaking.domain.Srs
 import com.jwahn.englishspeaking.speech.rememberSpeechInput
 import com.jwahn.englishspeaking.ui.Nav
@@ -65,11 +69,19 @@ import kotlinx.coroutines.launch
 fun SpokenResult(target: String, spoken: String) {
     val score = SpeechScore.score(target, spoken)
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text("${score}점", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = scoreColor(score))
+        Text("알아듣기 ${score}점", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = scoreColor(score))
+        Text("휴대폰이 알아들은 단어 비율이에요 (✓ 들림 · ✗ 못 들음)", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Text(
             buildAnnotatedString {
                 SpeechScore.wordHits(target, spoken).forEach { (w, ok) ->
-                    withStyle(SpanStyle(color = if (ok) Green else Red, fontWeight = FontWeight.SemiBold)) { append(w) }
+                    // 색만으로 구분하지 않도록 기호와 밑줄을 함께 쓴다
+                    withStyle(
+                        SpanStyle(
+                            color = if (ok) Green else Red, fontWeight = FontWeight.SemiBold,
+                            textDecoration = if (ok) null else TextDecoration.Underline,
+                        )
+                    ) { append(if (ok) "✓$w" else "✗$w") }
                     append(" ")
                 }
             },
@@ -79,7 +91,7 @@ fun SpokenResult(target: String, spoken: String) {
     }
 }
 
-/** 카드 학습. mode = chapter / due / bookmark */
+/** 카드 학습. mode = chapter / due / bookmark / new(그 챕터의 새 단어 5개) */
 @Composable
 fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
     val c = LocalContainer.current
@@ -92,12 +104,18 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
     var spokenTarget by remember { mutableStateOf("") }
     var known by remember { mutableIntStateOf(0) }
     var unknown by remember { mutableIntStateOf(0) }
+    // 같은 학습 중 다시 보여준 횟수, 이미 기록한 카드
+    val repeats = remember { mutableMapOf<Long, Int>() }
+    val recorded = remember { mutableSetOf<Long>() }
+    data class Undo(val list: List<WordEntity>, val index: Int, val before: WordEntity?, val known: Int, val unknown: Int)
+    var undo by remember { mutableStateOf<Undo?>(null) }
 
     LaunchedEffect(mode, chapterId) {
         val now = System.currentTimeMillis()
         words = when (mode) {
             "due" -> c.db.vocab().dueWords(now)
             "bookmark" -> c.db.vocab().bookmarkedWords()
+            "new" -> c.db.vocab().newWords(chapterId, 5)
             else -> c.db.vocab().wordsOfChapterOnce(chapterId)
                 .sortedWith(compareBy({ if (it.box == 0) 0 else 1 }, { it.nextDue }))
         }
@@ -105,7 +123,7 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
 
     val speech = rememberSpeechInput { text -> spoken = text }
 
-    val title = when (mode) { "due" -> "통합 복습"; "bookmark" -> "북마크 학습"; else -> "카드 학습" }
+    val title = when (mode) { "due" -> "통합 복습"; "bookmark" -> "북마크 학습"; "new" -> "새 단어 배우기"; else -> "카드 학습" }
     Screen(title, onBack = nav::back) { mod ->
         val list = words
         when {
@@ -116,11 +134,22 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
                 mod,
             ) { Button(onClick = nav::back) { Text("돌아가기") } }
             index >= list.size -> EmptyState(
-                "🏁", "학습 완료!", "알아요 $known · 몰라요 $unknown\n틀린 단어는 내일 다시 나와요.", mod,
-            ) { Button(onClick = nav::back) { Text("완료") } }
+                "🏁", "학습 완료!", "알아요 $known · 몰라요 $unknown\n모르는 단어는 내일 다시 나와요.", mod,
+            ) {
+                Button(onClick = nav::back) { Text("완료") }
+                undo?.let { u -> TextButton(onClick = { /* 마지막 카드 되돌리기 */
+                    words = u.list; index = u.index; known = u.known; unknown = u.unknown
+                    u.before?.let { b -> scope.launch { c.db.vocab().updateWord(b) }; recorded.remove(b.id) }
+                    undo = null; revealed = false
+                }) { Text("↩ 마지막 카드 되돌리기") } }
+            }
             else -> {
                 val w = list[index]
-                LaunchedEffect(w.id) { c.tts.speak(w.text) }
+                // 처음 보는 단어는 뜻을 바로 보여주고(배우기), 아는 단어는 가려서 떠올리게(복습)
+                LaunchedEffect(index) {
+                    revealed = w.box == 0 && w.id !in recorded
+                    if (!settings.silentMode) c.tts.speak(w.text)
+                }
                 Column(mod.verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     LinearProgressIndicator(progress = { index / list.size.toFloat() }, modifier = Modifier.fillMaxWidth())
                     Text("${index + 1} / ${list.size}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp))
@@ -135,6 +164,7 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
                                     words = list.toMutableList().also { it[index] = nw }
                                 }) { Icon(if (w.bookmarked) Icons.Default.Star else Icons.Default.StarBorder, "북마크", tint = Amber) }
                             }
+                            if (w.emoji.isNotBlank()) Text(w.emoji, fontSize = 56.sp)
                             Text(w.text, fontSize = 40.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                             if (w.ipa.isNotBlank()) Text("/${w.ipa}/", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 18.sp)
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 12.dp)) {
@@ -175,17 +205,35 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         fun answer(ok: Boolean) {
-                            val r = Srs.answer(w.box, ok)
-                            val updated = w.copy(
-                                box = r.box, nextDue = r.nextDue,
-                                correct = w.correct + if (ok) 1 else 0, wrong = w.wrong + if (ok) 0 else 1,
-                            )
-                            scope.launch { c.db.vocab().updateWord(updated); c.repo.recordActivity(reviews = 1) }
-                            if (ok) known++ else unknown++
-                            revealed = false; spoken = null; index++
+                            val first = w.id !in recorded
+                            undo = Undo(list, index, if (first) w else null, known, unknown)
+                            // 복습 단계는 이번 학습에서 처음 답할 때만 기록한다
+                            if (first) {
+                                recorded += w.id
+                                val r = Srs.answer(w.box, ok)
+                                val updated = w.copy(
+                                    box = r.box, nextDue = r.nextDue,
+                                    correct = w.correct + if (ok) 1 else 0, wrong = w.wrong + if (ok) 0 else 1,
+                                )
+                                scope.launch { c.db.vocab().updateWord(updated); c.repo.recordActivity(reviews = 1) }
+                                if (ok) known++ else unknown++
+                            }
+                            // 모르면 3장 뒤에 한 번 더 (최대 2번)
+                            if (!ok) {
+                                words = Requeue.again(list, index, countOf = { repeats[it.id] ?: 0 })
+                                repeats[w.id] = (repeats[w.id] ?: 0) + 1
+                            }
+                            spoken = null; index++
                         }
-                        Button(onClick = { answer(false) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("몰라요") }
-                        Button(onClick = { answer(true) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("알아요") }
+                        Button(onClick = { answer(false) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("✗ 몰라요") }
+                        Button(onClick = { answer(true) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("✓ 알아요") }
+                    }
+                    undo?.let { u ->
+                        TextButton(onClick = {
+                            words = u.list; index = u.index; known = u.known; unknown = u.unknown
+                            u.before?.let { b -> scope.launch { c.db.vocab().updateWord(b) }; recorded.remove(b.id) }
+                            undo = null
+                        }) { Text("↩ 방금 답 되돌리기") }
                     }
                 }
             }
@@ -193,7 +241,10 @@ fun StudyScreen(nav: Nav, mode: String, chapterId: Long) {
     }
 }
 
-private data class QuizQ(val word: WordEntity, val listening: Boolean, val choices: List<String>, val answer: String)
+/** kind: MEANING(영어 보고 뜻), LISTEN(듣고 단어), REVERSE(뜻 보고 영어) */
+private data class QuizQ(val word: WordEntity, val kind: String, val choices: List<String>, val answer: String) {
+    val listening get() = kind == "LISTEN"
+}
 
 @Composable
 fun QuizScreen(nav: Nav, chapterId: Long) {
@@ -207,11 +258,13 @@ fun QuizScreen(nav: Nav, chapterId: Long) {
     LaunchedEffect(chapterId) {
         val words = c.db.vocab().wordsOfChapterOnce(chapterId).shuffled().take(20)
         val pool = (c.db.vocab().randomWords(40) + words).distinctBy { it.id }
+        val silent = c.settings.current.silentMode
         qs = words.mapIndexed { i, w ->
-            val listening = i % 2 == 1
-            val others = pool.filter { it.id != w.id }.shuffled().take(3)
-            if (listening) QuizQ(w, true, (others.map { it.text } + w.text).shuffled(), w.text)
-            else QuizQ(w, false, (others.map { it.meaningKo } + w.meaningKo).shuffled(), w.meaningKo)
+            // 소리 없이 공부할 때는 듣기 문제 대신 '뜻 보고 영어 고르기'
+            val kind = when (i % 3) { 0 -> "MEANING"; 1 -> if (silent) "REVERSE" else "LISTEN"; else -> "REVERSE" }
+            val others = pool.filter { it.id != w.id && it.text != w.text && it.meaningKo != w.meaningKo }.shuffled().take(3)
+            if (kind == "MEANING") QuizQ(w, kind, (others.map { it.meaningKo } + w.meaningKo).shuffled(), w.meaningKo)
+            else QuizQ(w, kind, (others.map { it.text } + w.text).shuffled(), w.text)
         }
     }
 
@@ -229,6 +282,10 @@ fun QuizScreen(nav: Nav, chapterId: Long) {
             if (q.listening) {
                 Text("🎧 들리는 단어를 고르세요", style = MaterialTheme.typography.titleMedium)
                 IconButton(onClick = { c.tts.speak(q.word.text) }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "다시 듣기", Modifier.width(48.dp).height(48.dp)) }
+            } else if (q.kind == "REVERSE") {
+                Text("영어로 무엇일까요?", style = MaterialTheme.typography.titleMedium)
+                if (q.word.emoji.isNotBlank()) Text(q.word.emoji, fontSize = 48.sp)
+                Text(q.word.meaningKo, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
             } else {
                 Text("뜻을 고르세요", style = MaterialTheme.typography.titleMedium)
                 Text(q.word.text, fontSize = 36.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
@@ -257,7 +314,10 @@ fun QuizScreen(nav: Nav, chapterId: Long) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = color),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text(ch, Modifier.padding(6.dp)) }
+                ) {
+                    val mark = when { picked == null -> ""; ch == q.answer -> "✓ "; ch == picked -> "✗ "; else -> "" }
+                    Text(mark + ch, Modifier.padding(6.dp))
+                }
             }
             if (picked != null) {
                 Spacer(Modifier.height(12.dp))

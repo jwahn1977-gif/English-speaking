@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +23,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -89,19 +91,36 @@ fun HomeScreen(nav: Nav) {
 
     Screen(
         title = if (settings.nickname.isNotBlank()) "${settings.nickname}님, 안녕하세요 👋" else "오늘도 영어 한 마디 👋",
-        actions = { IconButton(onClick = nav::settings) { Icon(Icons.Default.Settings, "설정") } },
+        actions = {
+            val c = LocalContainer.current
+            val profiles by c.profiles.list.collectAsState()
+            val me = profiles.firstOrNull { it.id == c.profileId }
+            if (profiles.size > 1 && me != null) TextButton(onClick = nav::settings) { Text("${me.emoji} ${me.name}") }
+            IconButton(onClick = nav::settings) { Icon(Icons.Default.Settings, "설정") }
+        },
     ) { mod ->
         Column(mod.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             com.jwahn.englishspeaking.ui.news.NowPlayingBar(onOpen = { nav.newsLesson(it) })
+            val todayDone by LocalContainer.current.settings.todayDone.collectAsState()
+            Button(
+                onClick = nav::today,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 64.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("▶ 오늘의 공부 10분", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(if (todayDone.isEmpty()) "복습 → 새 단어 → 패턴 → 말하기를 차례로" else "${todayDone.size}/4 진행 중 · 이어서 하기",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
             if (!settings.anyConnected) {
                 Card(
-                    Modifier.fillMaxWidth().padding(top = 8.dp).clickable { nav.settings() },
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClickLabel = "AI 연결 설정 열기") { nav.settings() },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("🔌 AI를 연결해 주세요", fontWeight = FontWeight.Bold)
                         Text(
-                            "Claude, ChatGPT, Gemini 중 하나의 API 키를 넣으면 AI 튜터, 단어·패턴 생성, 뉴스 번역을 쓸 수 있어요. (단어장·복습은 AI 없이도 돼요)",
+                            "설정에서 '웹 로그인으로 연결하기'를 누르면 AI 선생님과 대화, 단어·패턴 만들기, 뉴스 번역을 쓸 수 있어요. (왕초보 과정·단어장·복습은 AI 없이도 돼요)",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -131,6 +150,8 @@ fun HomeScreen(nav: Nav) {
                     }
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(progress = { Levels.progress(s.usedWords) }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(6.dp))
+                    Text("국제 기준 ${level.cefr} 수준 · ${level.canDo}", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -164,7 +185,7 @@ fun HomeScreen(nav: Nav) {
 
 @Composable
 private fun ReviewTile(title: String, count: Int, action: String, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier.clickable(onClick = onClick)) {
+    Card(modifier.clickable(onClickLabel = action, onClick = onClick)) {
         Column(Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.Bold)
             Text("${count}개", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -183,7 +204,7 @@ private fun Stat(label: String, value: Int, suffix: String) {
 
 @Composable
 private fun QuickAction(emoji: String, title: String, sub: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(Modifier.fillMaxWidth().clickable(onClickLabel = "$title 시작", onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(emoji, fontSize = 28.sp)
             Spacer(Modifier.width(12.dp))

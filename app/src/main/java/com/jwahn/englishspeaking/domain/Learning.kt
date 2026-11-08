@@ -93,15 +93,24 @@ object SpeechScore {
 
 /** 실제 대화에서 사용한 고유 단어 수 기반 레벨 */
 object Levels {
-    data class Level(val no: Int, val name: String, val need: Int, val emoji: String, val prompt: String)
+    data class Level(
+        val no: Int, val name: String, val need: Int, val emoji: String, val prompt: String,
+        val cefr: String, val canDo: String,
+    )
 
     val all = listOf(
-        Level(1, "첫 마디", 0, "🌱", "absolute beginner (A1): use very short, simple sentences and the most common words"),
-        Level(2, "짧은 대답", 100, "🌿", "beginner (A1-A2): short simple sentences, everyday words"),
-        Level(3, "문장으로 말하기", 300, "🌳", "elementary (A2): simple sentences, common phrasal verbs, slow pace"),
-        Level(4, "실수하며 성장", 600, "🍀", "intermediate (B1): natural everyday English, some idioms explained by context"),
-        Level(5, "자연스러운 대화", 1200, "🌻", "upper-intermediate (B2): natural native-like English with varied vocabulary"),
-        Level(6, "유창한 표현가", 2500, "🏆", "advanced (C1): fully natural, nuanced English"),
+        Level(1, "첫 마디", 0, "🌱", "absolute beginner (Pre-A1/A1): use very short, simple sentences and the most common words",
+            "Pre-A1", "인사하고, 이름과 나이를 말할 수 있어요"),
+        Level(2, "짧은 대답", 100, "🌿", "beginner (A1): short simple sentences, everyday words",
+            "A1", "좋아하는 것, 가족, 물건을 짧게 말할 수 있어요"),
+        Level(3, "문장으로 말하기", 300, "🌳", "elementary (A2): simple sentences, common phrasal verbs, slow pace",
+            "A2", "주문하기, 길 묻기처럼 익숙한 상황에서 대화할 수 있어요"),
+        Level(4, "실수하며 성장", 600, "🍀", "intermediate (B1): natural everyday English, some idioms explained by context",
+            "B1", "경험과 계획을 이야기하고, 여행 중 대부분의 상황을 해결할 수 있어요"),
+        Level(5, "자연스러운 대화", 1200, "🌻", "upper-intermediate (B2): natural native-like English with varied vocabulary",
+            "B2", "원어민과 자연스럽게 대화하고 의견을 설명할 수 있어요"),
+        Level(6, "유창한 표현가", 2500, "🏆", "advanced (C1): fully natural, nuanced English",
+            "C1", "업무·토론에서 미묘한 차이까지 표현할 수 있어요"),
     )
 
     fun of(usedWords: Int): Level = all.last { usedWords >= it.need }
@@ -122,6 +131,17 @@ object Levels {
         SpeechScore.normalize(text).map { it.trim('\'') }
             .filter { it.length >= 2 && it !in stop && it.all { c -> c.isLetter() || c == '\'' } }
             .toSet()
+}
+
+/** 같은 학습 중에 틀린 카드를 몇 장 뒤에 다시 보여주는 순서 정하기 */
+object Requeue {
+    /** 현재 위치 index 의 카드를 틀렸을 때, gap 장 뒤(또는 맨 끝)에 다시 넣은 새 목록 */
+    fun <T> again(list: List<T>, index: Int, gap: Int = 3, maxRepeats: Int = 2, countOf: (T) -> Int): List<T> {
+        val item = list[index]
+        if (countOf(item) >= maxRepeats) return list
+        val pos = (index + 1 + gap).coerceAtMost(list.size)
+        return list.toMutableList().also { it.add(pos, item) }
+    }
 }
 
 object Streak {

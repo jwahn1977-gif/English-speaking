@@ -104,7 +104,7 @@ fun PatternsScreen(nav: Nav) {
             }
             if (list.isEmpty()) item { EmptyState("🧩", "패턴이 없어요", "AI 튜터와 대화하거나 'AI 생성'으로 만들어 보세요.") }
             items(list, key = { it.id }) { p ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { nav.pattern(p.id) }) {
+                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClickLabel = "패턴 연습하기") { nav.pattern(p.id) }) {
                     Column(Modifier.padding(14.dp)) {
                         PatternText(p.template)
                         Text(p.meaningKo, style = MaterialTheme.typography.bodyMedium)

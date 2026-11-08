@@ -102,7 +102,7 @@ fun TutorScreen(nav: Nav) {
                 items(list, key = { it.id }) { s ->
                     Card(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            .combinedClickable(onClick = { nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
+                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(s.emoji, fontSize = 32.sp)
@@ -119,7 +119,7 @@ fun TutorScreen(nav: Nav) {
                     item { SectionTitle("최근 대화 (눌러서 이어하기)") }
                     items(recent, key = { "c${it.id}" }) { conv ->
                         Card(
-                            Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable { nav.chat(conv.scenarioId, conv.id) },
+                            Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable(onClickLabel = "이어서 대화하기") { nav.chat(conv.scenarioId, conv.id) },
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         ) {
                             Row(Modifier.padding(12.dp)) {

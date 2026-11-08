@@ -34,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -141,6 +142,13 @@ fun ChatScreen(nav: Nav, scenarioId: Long, conversationId: Long) {
                     else AssistantBubble(item, settings.showKorean)
                 }
                 if (st.loading) item { Text("상대가 입력 중…", Modifier.padding(8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                // 무엇을 말할지 모를 때: 예시 답변을 눌러 듣고, 그대로 말하거나 보내기
+                val last = st.items.lastOrNull()
+                if (settings.showSuggestions && !st.loading && last?.role == "assistant" && last.suggestions.isNotEmpty()) item {
+                    SuggestionBox(last.suggestions, settings.showKorean,
+                        onPick = { h -> tts.speak(h.en); if (!st.voiceMode) input = h.en },
+                        onSay = { h -> tts.stop(); speech("en-US", h.en) })
+                }
                 item {
                     st.error?.let { ErrorCard(it, onRetry = vm::retry, onSettings = nav::settings) }
                     if (st.reportLoading) Loading("대화를 분석해서 리포트를 만드는 중…")
@@ -285,6 +293,29 @@ private fun ReportView(r: Report, title: String, onClose: () -> Unit, onDone: ()
                     Button(onClick = onDone) { Text("끝내기") }
                 }
                 Spacer(Modifier.width(1.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionBox(options: List<HintOption>, showKo: Boolean, onPick: (HintOption) -> Unit, onSay: (HintOption) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text("💡 이렇게 답해 볼까요? (누르면 들려주고 입력창에 넣어요)", style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary)
+        options.take(3).forEach { h ->
+            Card(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                    .clickable(onClickLabel = "예시 답변 듣고 넣기") { onPick(h) },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ) {
+                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Text(h.en, fontWeight = FontWeight.SemiBold)
+                        if (showKo && h.note.isNotBlank()) Text(h.note, style = MaterialTheme.typography.bodySmall)
+                    }
+                    IconButton(onClick = { onSay(h) }) { Icon(Icons.Default.Mic, "이 문장 따라 말하기") }
+                }
             }
         }
     }

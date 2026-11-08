@@ -5,6 +5,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -61,6 +65,7 @@ class AppSmokeTest {
          "patterns":[{"pattern":"I'd like ~, please","meaning_ko":"~ 주세요","example_en":"I'd like a latte, please.","example_ko":"라테 주세요."}],
          "words":[{"word":"barista","ipa":"bəˈriːstə","meaning_ko":"바리스타","example_en":"The barista smiled.","example_ko":"바리스타가 웃었다."}],
          "missions_done":[0],
+         "suggestions":[{"en":"A latte, please.","ko":"라테 주세요."},{"en":"Can I get a small latte to go?","ko":"작은 라테 포장 되나요?"}],
          "summary_ko":"주문을 잘 마쳤어요.","good_ko":["끝까지 영어로 말했어요"],
          "improvements":[{"original":"I want a coffee","better":"I'd like a coffee, please.","why_ko":"공손하게"}],
          "score":85,
@@ -115,7 +120,28 @@ class AppSmokeTest {
         }
     }
 
+    /** 화면 밖(목록 아래쪽)에 있으면 스크롤해서 찾는다 */
+    private fun scrollTo(text: String, substring: Boolean = false) {
+        val found = runCatching {
+            rule.waitUntil(3_000) { rule.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
+        }.isSuccess
+        if (!found) runCatching {
+            rule.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(text, substring = substring))
+            rule.waitForIdle()
+        }
+    }
+
+    /** 첫 실행 안내를 기본값으로 통과 */
+    private fun passOnboarding(learner: String? = null) {
+        waitText("반가워요", substring = true)
+        learner?.let { clickText(it) }
+        repeat(3) { clickText("다음") }
+        clickText("시작하기", substring = true)
+        waitText("오늘의 공부 10분", substring = true)
+    }
+
     private fun clickText(text: String, substring: Boolean = false) {
+        scrollTo(text, substring)
         waitText(text, substring)
         val node = rule.onAllNodesWithText(text, substring = substring).onFirst()
         runCatching { node.performScrollTo() }
@@ -137,14 +163,16 @@ class AppSmokeTest {
 
     @Test
     fun tabs_vocab_study_and_patterns() {
+        passOnboarding()
         waitText("AI를 연결해 주세요", substring = true)
         tab("단어장")
+        waitText("왕초보 과정", substring = true)
         clickText("일상생활")
         waitText("breakfast")
         clickText("카드 학습")
-        clickText("뜻 보기")
+        // 처음 보는 단어는 뜻이 바로 보인다
         waitText("아침 식사")
-        clickText("알아요")
+        clickText("✓ 알아요")
         waitText("commute")
         runBlocking {
             val w = container.db.vocab().findWord("breakfast")!!
@@ -164,10 +192,15 @@ class AppSmokeTest {
 
     @Test
     fun tutor_chat_correction_save_and_report() {
+        passOnboarding()
         connectClaude()
         tab("AI 튜터")
         clickText("카페에서 주문하기")
         waitText("Hi there! What can I get for you today?")
+        // 예시 답변: 누르면 입력창에 들어간다
+        clickText("A latte, please.")
+        rule.onNode(hasSetTextAction()).assert(hasText("A latte, please."))
+        rule.onNode(hasSetTextAction()).performTextClearance()
         rule.onNode(hasSetTextAction()).performTextInput("I want a coffee")
         rule.onNodeWithContentDescription("보내기").performClick()
         rule.waitUntil(15_000) {
@@ -190,6 +223,7 @@ class AppSmokeTest {
 
     @Test
     fun news_listening_flow() {
+        passOnboarding("자신 있어요")
         connectClaude()
         tab("뉴스 듣기")
         waitText("City opens new park")
@@ -227,7 +261,7 @@ class AppSmokeTest {
     fun reminder_worker_posts_notification_when_reviews_due() {
         org.robolectric.Shadows.shadowOf(rule.activity.application)
             .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        waitText("단어장")
+        passOnboarding()
         runBlocking {
             val w = container.db.vocab().findWord("breakfast")!!
             container.db.vocab().updateWord(w.copy(box = 1, nextDue = 0))
@@ -243,6 +277,7 @@ class AppSmokeTest {
 
     @Test
     fun other_screens_open_and_ai_generation() {
+        passOnboarding()
         connectClaude()
         // 퀴즈
         tab("단어장")
@@ -292,5 +327,32 @@ class AppSmokeTest {
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.onNodeWithContentDescription("직접 붙여넣기").performClick()
         waitText("영어 기사·글을 붙여넣으세요")
+    }
+
+    /** 왕초보: 첫 실행 → 오늘의 공부 → 새 단어 5개(알파벳 소리) → 모르면 다시 나옴 */
+    @Test
+    fun beginner_onboarding_today_plan_and_requeue() {
+        passOnboarding("처음 배워요")
+        assertEquals(com.jwahn.englishspeaking.data.settings.Learner.STARTER, container.settings.current.learner)
+        clickText("오늘의 공부 10분", substring = true)
+        waitText("1. 복습하기")
+        clickText("2. 새 단어 5개")
+        waitText("새 단어 배우기")
+        waitText("A a")
+        waitText("1 / 5")
+        clickText("✗ 몰라요")
+        waitText("B b")
+        waitText("2 / 6") // 모르는 카드가 뒤에 다시 들어갔다
+        clickText("↩ 방금 답 되돌리기")
+        waitText("A a")
+        waitText("1 / 5")
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        waitText("✓ 완료", substring = true)
+        // 글자 크기 설정
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithContentDescription("설정").performClick()
+        clickText("아주 크게")
+        assertEquals(1.4f, container.settings.current.fontScale)
+        waitText("웹 로그인으로 연결하기")
     }
 }

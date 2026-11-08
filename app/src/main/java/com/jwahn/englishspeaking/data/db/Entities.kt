@@ -12,6 +12,9 @@ data class ChapterEntity(
     val description: String = "",
     val source: String = "builtin",
     val createdAt: Long = System.currentTimeMillis(),
+    /** 0 = 왕초보 과정, 1 = 기초, 2 = 일반 */
+    val level: Int = 2,
+    val emoji: String = "",
 )
 
 /**
@@ -36,6 +39,7 @@ data class WordEntity(
     val correct: Int = 0,
     val wrong: Int = 0,
     val bestScore: Int = 0,
+    val emoji: String = "",
 )
 
 /** 재사용 가능한 문장 패턴. 예: "I'm thinking of ~ing" */

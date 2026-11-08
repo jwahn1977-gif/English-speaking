@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jwahn.englishspeaking.data.WordDraft
 import com.jwahn.englishspeaking.data.db.ChapterStat
 import com.jwahn.englishspeaking.data.db.WordEntity
@@ -89,7 +90,18 @@ fun VocabScreen(nav: Nav) {
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            items(stats, key = { it.id }) { ChapterCard(it) { nav.chapter(it.id) } }
+            val beginner = stats.filter { it.level == 0 }
+            val others = stats.filter { it.level != 0 }
+            if (beginner.isNotEmpty()) {
+                item {
+                    com.jwahn.englishspeaking.ui.common.SectionTitle("🌱 왕초보 과정 · AI 없이 시작")
+                    Text("알파벳 소리 → 인사 → 기초 단어 → 생활 표현 순서로 해 보세요.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(beginner, key = { it.id }) { ChapterCard(it) { nav.chapter(it.id) } }
+            }
+            item { com.jwahn.englishspeaking.ui.common.SectionTitle("📚 주제별 단어장") }
+            items(others, key = { it.id }) { ChapterCard(it) { nav.chapter(it.id) } }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
@@ -97,25 +109,26 @@ fun VocabScreen(nav: Nav) {
 
 @Composable
 private fun ChapterCard(s: ChapterStat, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.width(88.dp).height(112.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Card(
-                    Modifier.fillMaxWidth().fillMaxHeight(),
-                    colors = CardDefaults.cardColors(containerColor = if (s.progress > 0) Amber else MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(16.dp))
-                        Text(s.title, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 3,
-                            style = MaterialTheme.typography.bodyMedium)
-                        Text("${s.total}단어", style = MaterialTheme.typography.labelSmall)
-                    }
+    // 고정 크기를 쓰지 않아 큰 글씨에서도 잘리지 않는다
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClickLabel = "단어장 열기", onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (s.progress > 0) Amber.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (s.emoji.isNotBlank()) { Text(s.emoji, fontSize = 28.sp); Spacer(Modifier.width(10.dp)) }
+                Column(Modifier.weight(1f)) {
+                    Text(s.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${s.total}개" + (if (s.description.isNotBlank()) " · ${s.description}" else ""),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            Row(Modifier.weight(1f).padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 RingGauge(s.memorizeRate, "암기율", Blue, 56.dp)
                 RingGauge(s.strength, "암기강도", Amber, 56.dp)
                 RingGauge(s.progress, "진도율", Green, 56.dp)
@@ -181,6 +194,7 @@ private fun WordRow(w: WordEntity, onBookmark: () -> Unit) {
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (w.emoji.isNotBlank()) Text(w.emoji + " ")
                     Text(w.text, fontWeight = FontWeight.Bold)
                     if (w.ipa.isNotBlank()) Text("  /${w.ipa}/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

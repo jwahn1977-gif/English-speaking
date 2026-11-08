@@ -11,6 +11,7 @@ import com.jwahn.englishspeaking.data.db.ScenarioEntity
 import com.jwahn.englishspeaking.data.llm.ChatMsg
 import com.jwahn.englishspeaking.data.llm.Prompts
 import com.jwahn.englishspeaking.data.settings.TutorLevel
+import com.jwahn.englishspeaking.data.settings.levelPrompt
 import com.jwahn.englishspeaking.domain.JsonText
 import com.jwahn.englishspeaking.domain.Levels
 import com.jwahn.englishspeaking.domain.arr
@@ -38,6 +39,7 @@ data class ChatItem(
     val correction: Correction? = null,
     val patterns: List<PatternDraft> = emptyList(),
     val words: List<WordDraft> = emptyList(),
+    val suggestions: List<HintOption> = emptyList(),
 )
 
 data class HintOption(val en: String, val note: String)
@@ -108,16 +110,11 @@ class ChatViewModel(private val c: AppContainer, private val scenarioId: Long, p
             correction = corr,
             patterns = o.objs("patterns").mapNotNull { PatternDraft.from(it, "AI 튜터") },
             words = o.objs("words").mapNotNull { WordDraft.from(it) },
+            suggestions = o.objs("suggestions").map { HintOption(it.str("en"), it.str("ko")) }.filter { it.en.isNotBlank() },
         )
     }
 
-    private suspend fun levelPrompt(): String = when (c.settings.current.tutorLevel) {
-        TutorLevel.AUTO -> Levels.of(c.db.tutor().usedWordCountOnce()).prompt
-        TutorLevel.KIDS -> "a young child (6-10 years old): very simple words, very short sentences, lots of praise"
-        TutorLevel.BEGINNER -> "beginner (A2): short simple sentences, everyday words"
-        TutorLevel.INTERMEDIATE -> "intermediate (B1-B2): natural everyday English"
-        TutorLevel.ADVANCED -> "advanced (C1): fully natural, nuanced English with idioms"
-    }
+    private suspend fun levelPrompt(): String = c.settings.current.levelPrompt(c.db.tutor().usedWordCountOnce())
 
     private fun history(): List<ChatMsg> {
         val msgs = mutableListOf(ChatMsg("user", Prompts.TUTOR_OPENING))
@@ -148,7 +145,9 @@ class ChatViewModel(private val c: AppContainer, private val scenarioId: Long, p
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             runCatching {
-                val system = Prompts.tutorSystem(scenario, levelPrompt(), c.settings.current.nickname)
+                val kids = scenario.category == "KIDS" || c.settings.current.tutorLevel == TutorLevel.KIDS ||
+                    c.settings.current.learner == com.jwahn.englishspeaking.data.settings.Learner.KIDS
+                val system = Prompts.tutorSystem(scenario, levelPrompt(), c.settings.current.nickname, kids)
                 c.llm.completeJson(system, history(), maxTokens = 1500)
             }.onSuccess { o ->
                 val tmp = parseReply(o, tempId--)

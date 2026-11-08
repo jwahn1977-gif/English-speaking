@@ -25,6 +25,31 @@ class Tts(context: Context) {
 
     var rate: Float = 1.0f
 
+    /** 사용자가 고른 목소리 이름 (비어 있으면 기기 기본 영어 목소리) */
+    var voiceName: String = ""
+        set(v) { field = v; main.post { applyVoice() } }
+
+    data class VoiceOption(val name: String, val label: String)
+
+    /** 기기에 있는 영어 목소리 목록 (품질 높은 순) */
+    fun englishVoices(): List<VoiceOption> = runCatching {
+        tts?.voices.orEmpty()
+            .filter { it.locale.language == "en" && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            .sortedWith(compareByDescending<android.speech.tts.Voice> { it.quality }.thenBy { it.isNetworkConnectionRequired }.thenBy { it.name })
+            .map { v ->
+                val country = when (v.locale.country) { "US" -> "미국"; "GB" -> "영국"; "AU" -> "호주"; "IN" -> "인도"; "CA" -> "캐나다"; else -> v.locale.country }
+                val quality = if (v.quality >= android.speech.tts.Voice.QUALITY_HIGH) "고음질" else "보통"
+                VoiceOption(v.name, "$country · $quality" + (if (v.isNetworkConnectionRequired) " · 인터넷 필요" else "") + " · ${v.name.takeLast(12)}")
+            }
+    }.getOrDefault(emptyList())
+
+    private fun applyVoice() {
+        val t = tts ?: return
+        if (!_ready.value) return
+        val v = if (voiceName.isBlank()) null else runCatching { t.voices?.firstOrNull { it.name == voiceName } }.getOrNull()
+        if (v != null) t.voice = v else t.language = Locale.US
+    }
+
     private var tts: TextToSpeech? = null
 
     init {
@@ -43,6 +68,7 @@ class Tts(context: Context) {
                 })
                 main.post {
                     _ready.value = true
+                    applyVoice()
                     pending.forEach { it() }
                     pending.clear()
                 }

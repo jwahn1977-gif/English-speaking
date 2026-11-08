@@ -44,7 +44,7 @@ class LlmClient(
     }
 
     fun requireProvider(): Provider = activeProvider()
-        ?: throw LlmException("AI가 연결되지 않았어요.\n설정 > AI 연결에서 Claude, ChatGPT, Gemini 중 하나의 API 키를 입력해 주세요.")
+        ?: throw LlmException("AI가 연결되지 않았어요.\n설정 > AI 연결에서 'OpenRouter 웹 로그인'을 누르거나 Claude·ChatGPT·Gemini 키를 넣어 주세요.")
 
     /** 텍스트 응답 */
     suspend fun complete(
@@ -55,11 +55,16 @@ class LlmClient(
         provider: Provider? = null,
     ): String = withContext(Dispatchers.IO) {
         val p = provider ?: requireProvider()
+        if (settings.overDailyLimit()) {
+            throw LlmException("오늘 AI 사용 한도(${settings.current.dailyAiLimit}회)를 다 썼어요. 내일 다시 하거나 설정에서 한도를 바꿔 주세요.\n단어장·복습·뉴스 원문 듣기는 계속 할 수 있어요.")
+        }
         val s = settings.current
         val key = s.key(p).ifBlank { throw LlmException("${p.label} API 키가 없습니다.") }
         val model = s.model(p)
         val merged = mergeRoles(messages)
         when (p) {
+            Provider.OPENROUTER -> openai(key, model, system, merged, maxTokens, jsonMode = false,
+                url = "https://openrouter.ai/api/v1/chat/completions", tokenField = "max_tokens")
             Provider.CLAUDE -> claude(key, model, system, merged, maxTokens)
             Provider.OPENAI -> openai(key, model, system, merged, maxTokens, jsonMode)
             Provider.GEMINI -> gemini(key, model, system, merged, maxTokens, jsonMode)
@@ -89,6 +94,8 @@ class LlmClient(
     suspend fun listModels(p: Provider, key: String): List<String> = withContext(Dispatchers.IO) {
         if (key.isBlank()) throw LlmException("API 키를 입력하세요.")
         val req = when (p) {
+            Provider.OPENROUTER -> Request.Builder().url("https://openrouter.ai/api/v1/models")
+                .header("Authorization", "Bearer $key").build()
             Provider.CLAUDE -> Request.Builder().url("https://api.anthropic.com/v1/models?limit=100")
                 .header("x-api-key", key).header("anthropic-version", "2023-06-01").build()
             Provider.OPENAI -> Request.Builder().url("https://api.openai.com/v1/models")
@@ -100,6 +107,10 @@ class LlmClient(
         val body = execute(req)
         val root = json.parseToJsonElement(body).jsonObject
         when (p) {
+            Provider.OPENROUTER -> root["data"]?.jsonArray
+                ?.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
+                ?.filter { it.startsWith("anthropic/") || it.startsWith("openai/") || it.startsWith("google/") || it.startsWith("openrouter/") }
+                ?.sorted()
             Provider.CLAUDE -> root["data"]?.jsonArray?.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
             Provider.OPENAI -> root["data"]?.jsonArray
                 ?.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
@@ -130,6 +141,7 @@ class LlmClient(
             .header("anthropic-version", "2023-06-01")
             .post(body.toString().toRequestBody(jsonType)).build()
         val root = json.parseToJsonElement(execute(req)).jsonObject
+        track(root["usage"]?.jsonObject, "input_tokens", "output_tokens")
         val text = root["content"]?.jsonArray
             ?.filter { it.jsonObject["type"]?.jsonPrimitive?.contentOrNull == "text" }
             ?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
@@ -139,20 +151,25 @@ class LlmClient(
         return text?.takeIf { it.isNotBlank() } ?: throw LlmException("빈 응답을 받았어요.")
     }
 
-    private fun openai(key: String, model: String, system: String, msgs: List<ChatMsg>, maxTokens: Int, jsonMode: Boolean): String {
+    private fun openai(
+        key: String, model: String, system: String, msgs: List<ChatMsg>, maxTokens: Int, jsonMode: Boolean,
+        url: String = "https://api.openai.com/v1/chat/completions", tokenField: String = "max_completion_tokens",
+    ): String {
         val body = buildJsonObject {
             put("model", model)
-            put("max_completion_tokens", maxTokens)
+            put(tokenField, maxTokens)
             putJsonArray("messages") {
                 addJsonObject { put("role", "system"); put("content", system) }
                 msgs.forEach { m -> addJsonObject { put("role", m.role); put("content", m.text) } }
             }
             if (jsonMode) putJsonObject("response_format") { put("type", "json_object") }
         }
-        val req = Request.Builder().url("https://api.openai.com/v1/chat/completions")
+        val req = Request.Builder().url(url)
             .header("Authorization", "Bearer $key")
+            .header("X-Title", "English Speaking")
             .post(body.toString().toRequestBody(jsonType)).build()
         val root = json.parseToJsonElement(execute(req)).jsonObject
+        track(root["usage"]?.jsonObject, "prompt_tokens", "completion_tokens")
         return root["choices"]?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull
             ?.takeIf { it.isNotBlank() } ?: throw LlmException("빈 응답을 받았어요.")
@@ -182,11 +199,18 @@ class LlmClient(
             .header("x-goog-api-key", key)
             .post(body.toString().toRequestBody(jsonType)).build()
         val root = json.parseToJsonElement(execute(req)).jsonObject
+        track(root["usageMetadata"]?.jsonObject, "promptTokenCount", "candidatesTokenCount")
         val parts = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("content")?.jsonObject?.get("parts")?.jsonArray ?: JsonArray(emptyList())
         val text = parts.filter { it.jsonObject["thought"]?.jsonPrimitive?.booleanOrNull != true }
             .joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
         return text.takeIf { it.isNotBlank() } ?: throw LlmException("빈 응답을 받았어요. (안전 필터 또는 토큰 한도)")
+    }
+
+    /** 호출 1회와 토큰 수를 기록 (프로필별 오늘·이번 달 사용량) */
+    private fun track(usage: JsonObject?, inKey: String, outKey: String) {
+        val tokens = listOf(inKey, outKey).sumOf { k -> usage?.get(k)?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0 }
+        settings.recordUsage(tokens)
     }
 
     private fun execute(req: Request): String {
@@ -207,6 +231,7 @@ class LlmClient(
                 val hint = when (it.code) {
                     401, 403 -> " (API 키를 확인하세요)"
                     404 -> " (모델 이름을 확인하세요)"
+                    402 -> " (크레딧 부족: OpenRouter에서 충전하거나 이름에 :free가 붙은 무료 모델을 고르세요)"
                     429 -> " (사용량 한도 초과 또는 크레딧 부족)"
                     else -> ""
                 }
