@@ -468,6 +468,37 @@ class AppSmokeTest {
         assertTrue(!container.settings.current.subscriptionOnly)
     }
 
+    /** Claude 앱이 설치돼 있으면 링크 대신 앱 첫 화면을 바로 연다 (Claude Code 등 엉뚱한 화면 방지) */
+    @Test
+    fun installed_claude_app_opens_directly_with_prompt_copied() {
+        val pm = org.robolectric.Shadows.shadowOf(rule.activity.packageManager)
+        val launcher = android.content.Intent(android.content.Intent.ACTION_MAIN)
+            .addCategory(android.content.Intent.CATEGORY_LAUNCHER).setPackage("com.anthropic.claude")
+        pm.addResolveInfoForIntent(launcher, android.content.pm.ResolveInfo().apply {
+            activityInfo = android.content.pm.ActivityInfo().apply {
+                packageName = "com.anthropic.claude"; name = "com.anthropic.claude.MainActivity"
+                applicationInfo = android.content.pm.ApplicationInfo().apply { packageName = "com.anthropic.claude" }
+            }
+        })
+        passOnboarding()
+        container.settings.update { it.copy(subscriptionApp = "CLAUDE") }
+        tab("홈")
+        waitText("Claude 앱으로 넘겨서 사용", substring = true)
+        tab("AI 튜터")
+        clickText("카페에서 주문하기")
+        val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
+        rule.waitUntil(10_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        val started = shadowApp.nextStartedActivity!!
+        assertEquals("com.anthropic.claude", started.`package` ?: started.component?.packageName)
+        assertEquals(null, started.data) // 링크로 열지 않는다
+        val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
+        assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("말해요 영어"))
+        waitText("Claude 앱으로 넘어갔어요", substring = true)
+    }
+
     private fun findWebView(): android.webkit.WebView {
         fun search(v: android.view.View): android.webkit.WebView? = when (v) {
             is android.webkit.WebView -> v

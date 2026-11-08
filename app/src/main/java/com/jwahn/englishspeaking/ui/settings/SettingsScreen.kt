@@ -120,7 +120,11 @@ fun SettingsScreen(nav: Nav) {
             SectionTitle("AI 연결")
             Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FreeGeminiCard()
-            SubscriptionLoginCard(onLogin = { nav.webChat(it) })
+            var showSub by remember { mutableStateOf(!s.anyConnected) }
+            TextButton(onClick = { showSub = !showSub }) {
+                Text((if (showSub) "▲ " else "▼ ") + "구독 앱으로 넘겨서 쓰기 (Claude · ChatGPT · Gemini 앱)")
+            }
+            if (showSub) SubscriptionLoginCard(onLogin = { nav.webChat(it) })
             Text("앱 안에서 바로 대화·교정·자동 저장까지 하려면 아래 'API 연결'을 쓰세요.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OpenRouterLoginCard()

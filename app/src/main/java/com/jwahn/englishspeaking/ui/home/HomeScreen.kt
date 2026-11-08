@@ -112,6 +112,22 @@ fun HomeScreen(nav: Nav) {
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
+            // AI 연결 상태를 항상 보여준다
+            val sub = com.jwahn.englishspeaking.ui.handoff.SubApp.of(settings.subscriptionApp)
+            val active = LocalContainer.current.llm.activeProvider()
+            if (active != null || sub != null) {
+                Card(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClickLabel = "AI 연결 설정 열기") { nav.settings() },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    Text(
+                        if (active != null) "🤖 AI: ${active.label.substringBefore(" (")} 연결됨 ✅ · 앱 안에서 바로 사용"
+                        else "🤖 AI: ${sub!!.label} 앱으로 넘겨서 사용 · " +
+                            if (settings.isLoginConfirmed(sub.id)) "로그인 확인됨" else "로그인 확인 필요 (눌러서 설정)",
+                        modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
             if (!settings.anyConnected && settings.subscriptionApp.isBlank()) {
                 Card(
                     Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClickLabel = "AI 연결 설정 열기") { nav.settings() },

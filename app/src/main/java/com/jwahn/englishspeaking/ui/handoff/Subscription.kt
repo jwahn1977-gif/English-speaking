@@ -133,3 +133,33 @@ fun openInChrome(context: Context, url: String) = onMain {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.onFailure { Toast.makeText(context, "브라우저를 열 수 없어요.", Toast.LENGTH_LONG).show() }
 }
+
+
+/** 공식 앱이 폰에 설치돼 있는지 */
+fun isAppInstalled(context: Context, app: SubApp): Boolean =
+    context.packageManager.getLaunchIntentForPackage(app.pkg) != null
+
+/**
+ * 구독 계정으로 쓰기: 설치된 공식 앱을 '첫 화면'으로 바로 연다 (링크를 쓰지 않아 엉뚱한 화면으로 가지 않음).
+ * 앱이 없으면 Chrome으로 연다. 수업 지시문은 복사해 둔다.
+ * 반환: 공식 앱으로 열었는지
+ */
+fun openSubscription(context: Context, app: SubApp, webUrl: String, prompt: String?): Boolean {
+    prompt?.let { copyText(context, it) }
+    val launch = context.packageManager.getLaunchIntentForPackage(app.pkg)
+    return if (launch != null) {
+        onMain {
+            runCatching { context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .onFailure { openInChrome(context, webUrl) }
+            Toast.makeText(
+                context,
+                if (prompt != null) "${app.label} 앱에서 '새 채팅' → 입력칸 길게 눌러 붙여넣기 → 보내기" else "${app.label} 앱이 열려요. 로그인돼 있는지 확인하세요.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+        true
+    } else {
+        openInChrome(context, webUrl)
+        false
+    }
+}

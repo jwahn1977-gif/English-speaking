@@ -173,8 +173,8 @@ fun SubscriptionLoginCard(onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp
         Column(Modifier.padding(16.dp)) {
             Text("구독 계정으로 로그인 (Claude · ChatGPT · Gemini)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "이미 쓰는 Claude Pro, ChatGPT Plus, Gemini 계정으로 공부해요. 아래 버튼을 누르면 Chrome에서 로그인 화면이 열려요. 한 번 로그인하면 계속 유지돼요.\n" +
-                    "AI 튜터와 단어·패턴 만들기를 누르면 Chrome에서 그 서비스와 대화가 시작되고, 수업 지시문이 자동으로 들어가요. 추가 요금이 없어요.\n" +
+                "이미 쓰는 Claude Pro, ChatGPT Plus, Gemini 계정으로 공부해요. 폰에 그 앱이 있으면 앱이, 없으면 Chrome이 열려요. 로그인은 그 앱에서 해요.\n" +
+                    "AI 튜터를 누르면 그 앱이 열리고 수업 지시문이 복사돼 있어요. 새 채팅에 붙여넣고 보내면 돼요. 추가 요금이 없어요.\n" +
                     "※ 각 회사가 구독 계정을 다른 앱의 AI 엔진으로 쓰는 것을 허용하지 않아, 대화는 그 서비스 화면에서 하고 결과는 '결과 가져오기'로 저장해요.",
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -201,7 +201,7 @@ fun SubscriptionLoginCard(onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp
                 }
             }
             Text(
-                "로그인과 대화는 Chrome 창에서 열려요. Chrome에서 한 번 로그인하면 계속 유지되고, 구글 계정 로그인도 돼요.",
+                "이 앱은 다른 앱의 로그인 상태를 볼 수 없어요. 그 앱에서 로그인돼 있는 걸 확인한 뒤 '✅ 로그인했어요'를 눌러 주세요.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TextButton(onClick = { com.jwahn.englishspeaking.ui.handoff.openInChrome(context, com.jwahn.englishspeaking.ui.handoff.LoginHelp.GOOGLE_RECOVERY) }) {

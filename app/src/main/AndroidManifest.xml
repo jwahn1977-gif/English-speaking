@@ -16,6 +16,10 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- 구독 계정으로 쓸 때 설치된 공식 앱을 바로 열기 위해 -->
+        <package android:name="com.anthropic.claude" />
+        <package android:name="com.openai.chatgpt" />
+        <package android:name="com.google.android.apps.bard" />
     </queries>
 
     <application
