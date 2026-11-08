@@ -92,7 +92,12 @@ fun WebChatScreen(nav: Nav, appId: String) {
         if (external) {
             prompt?.let {
                 copyText(context, it)
-                Toast.makeText(context, "수업 지시문이 들어가요. 빨간 경고가 보여도 보내기(↑)를 누르세요.", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    context,
+                    if (app.prefill) "수업 지시문이 들어가요. 빨간 경고가 보여도 보내기(↑)를 누르세요."
+                    else "수업 지시문을 복사했어요. 새 채팅 입력칸을 길게 눌러 붙여넣고 보내세요.",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
             openInChrome(context, startUrl)
         }
@@ -218,9 +223,21 @@ fun WebChatScreen(nav: Nav, appId: String) {
                     Text("Chrome에서 로그인하면 다음부터는 바로 열려요(구글 계정 로그인 가능). 대화가 끝나면 마지막 답을 복사하고 이 화면으로 돌아와 위의 '결과 가져오기'를 누르세요.",
                         style = MaterialTheme.typography.bodyMedium)
                     if (prompt != null) Text(
-                        "💡 Claude 앱에서 빨간 '주의하세요' 경고가 보여도 괜찮아요. 이 앱이 넣은 수업 지시문이라 안전해요. 주황색 ↑(보내기)를 누르면 수업이 시작돼요.",
+                        if (app.prefill) "💡 빨간 '주의하세요' 경고가 보여도 괜찮아요. 이 앱이 넣은 수업 지시문이에요. 보내기(↑)를 누르면 수업이 시작돼요."
+                        else "💡 ${app.label} 화면에서 '새 채팅'을 열고, 입력칸을 길게 눌러 '붙여넣기' → 보내기(↑)를 누르면 수업이 시작돼요. (지시문은 이미 복사돼 있어요)",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
                     )
+                    if (prompt == null) {
+                        // 앱은 Chrome의 로그인 상태를 읽을 수 없어서 사용자에게 확인받는다
+                        val confirmed = appSettings.isLoginConfirmed(app.id)
+                        Text(if (confirmed) "🔐 로그인 확인됨" else "Chrome에서 로그인을 마쳤으면 아래 버튼을 눌러 주세요.",
+                            fontWeight = FontWeight.Bold)
+                        Button(onClick = {
+                            c.settings.update { it.withLoginConfirmed(app.id, true).copy(subscriptionApp = app.id) }
+                            nav.back()
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("✅ 로그인했어요") }
+                        TextButton(onClick = { c.settings.update { it.withLoginConfirmed(app.id, false) } }) { Text("아직 안 됐어요 (로그인 다시 하기)") }
+                    }
                     Button(onClick = { prompt?.let { copyText(context, it) }; openInChrome(context, startUrl) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         Text("Chrome에서 ${app.label} 다시 열기")
                     }

@@ -123,6 +123,7 @@ fun OnboardingScreen(onDone: () -> Unit, onLogin: ((com.jwahn.englishspeaking.ui
             else -> {
                 Text("AI 선생님 연결 (선택)", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text("AI를 연결하면 대화 연습, 단어·패턴 만들기, 뉴스 번역을 쓸 수 있어요. 왕초보 과정, 단어장, 복습은 연결하지 않아도 돼요.")
+                com.jwahn.englishspeaking.ui.settings.FreeGeminiCard()
                 com.jwahn.englishspeaking.ui.settings.SubscriptionLoginCard(onLogin)
                 OpenRouterLoginCard()
                 Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

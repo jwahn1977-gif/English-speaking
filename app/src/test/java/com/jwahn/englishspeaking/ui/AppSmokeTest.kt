@@ -102,6 +102,8 @@ class AppSmokeTest {
                 }.toString(), "application/json")
                 url.toString().contains("rss") || url.toString().contains("feeds") -> respond(chain, rss, "application/xml")
                 url.host == "example.com" -> respond(chain, article, "text/html")
+                url.host == "generativelanguage.googleapis.com" && url.encodedPath.endsWith("/models") -> respond(chain,
+                    """{"models":[{"name":"models/gemini-test","supportedGenerationMethods":["generateContent"]}]}""", "application/json")
                 else -> Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(404).message("NF")
                     .body("".toResponseBody(null)).build()
             }
@@ -379,14 +381,17 @@ class AppSmokeTest {
         waitText("Chrome 창에서 열려 있어요", substring = true)
         assertEquals("CLAUDE", container.settings.current.subscriptionApp)
         assertEquals("https://claude.ai/login", nextOpenedUrl())
-        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        // 앱은 Chrome의 로그인 상태를 읽을 수 없으므로 사용자가 확인
+        clickText("✅ 로그인했어요")
+        assertTrue(container.settings.current.isLoginConfirmed("CLAUDE"))
+        waitText("🔐 로그인됨")
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
 
         tab("AI 튜터")
         clickText("카페에서 주문하기")
         waitText("Chrome 창에서 열려 있어요", substring = true)
         val url = nextOpenedUrl()
-        assertTrue(url, url.startsWith("https://claude.ai/new?q=") && url.contains("Role-play"))
+        assertEquals("https://claude.ai/", url) // 미리 채우기 링크 대신 채팅 첫 화면 + 복사
         val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
         assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("말해요 영어"))
 
@@ -442,6 +447,25 @@ class AppSmokeTest {
         assertTrue(!container.settings.current.opensExternally("CLAUDE"))
         assertEquals("https://claude.ai/login", org.robolectric.Shadows.shadowOf(findWebView()).lastLoadedUrl)
         assertTrue(container.settings.current.opensExternally("GEMINI"))
+    }
+
+    /** 무료 Gemini 키: Chrome에서 키 복사 → 돌아오면 자동 입력·연결 확인 → 튜터가 앱 안에서 동작 */
+    @Test
+    fun free_gemini_key_connects_and_tutor_runs_in_app() {
+        passOnboarding()
+        tab("홈")
+        rule.onNodeWithContentDescription("설정").performClick()
+        clickText("Chrome에서 무료 키 받기")
+        assertEquals("https://aistudio.google.com/apikey", nextOpenedUrl())
+        val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
+        rule.activity.runOnUiThread { cm.setPrimaryClip(android.content.ClipData.newPlainText("k", "AIzaSyTestKey1234567890abcdefghijk")) }
+        // Chrome에서 돌아온 것처럼 화면을 다시 띄운다
+        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        waitText("연결 확인 완료", substring = true)
+        assertEquals(Provider.GEMINI, container.settings.current.defaultProvider)
+        assertTrue(requests.any { it.contains("generativelanguage.googleapis.com/v1beta/models") })
+        assertTrue(!container.settings.current.subscriptionOnly)
     }
 
     private fun findWebView(): android.webkit.WebView {

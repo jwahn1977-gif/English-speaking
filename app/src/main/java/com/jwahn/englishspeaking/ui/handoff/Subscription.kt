@@ -17,7 +17,7 @@ import java.net.URLEncoder
  * (공식 앱의 로그인 세션을 그대로 쓰며, 이 앱이 계정 정보나 대화를 가로채지 않는다)
  */
 enum class SubApp(val id: String, val label: String, val loginUrl: String, val pkg: String, val prefill: Boolean) {
-    CLAUDE("CLAUDE", "Claude", "https://claude.ai/login", "com.anthropic.claude", true),
+    CLAUDE("CLAUDE", "Claude", "https://claude.ai/login", "com.anthropic.claude", false),
     CHATGPT("CHATGPT", "ChatGPT", "https://chatgpt.com/auth/login", "com.openai.chatgpt", true),
     GEMINI("GEMINI", "Gemini", "https://gemini.google.com/app", "com.google.android.apps.bard", false);
 
@@ -25,7 +25,8 @@ enum class SubApp(val id: String, val label: String, val loginUrl: String, val p
     fun chatUrl(prompt: String): String {
         val q = URLEncoder.encode(prompt, "UTF-8").replace("+", "%20")
         return when (this) {
-            CLAUDE -> "https://claude.ai/new?q=$q"
+            // 미리 채우기 링크는 Claude 앱에서 다른 화면(Claude Code 등)으로 열릴 수 있어 채팅 첫 화면만 연다
+            CLAUDE -> "https://claude.ai/"
             CHATGPT -> "https://chatgpt.com/?q=$q"
             GEMINI -> "https://gemini.google.com/app"
         }
@@ -121,7 +122,12 @@ fun openInChrome(context: Context, url: String) = onMain {
         androidx.browser.customtabs.CustomTabsIntent.Builder()
             .setShowTitle(true)
             .build()
-            .apply { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            .apply {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // 설치된 Claude·ChatGPT 앱이 링크를 가로채지 않도록 Chrome에서 연다
+                androidx.browser.customtabs.CustomTabsClient.getPackageName(context, listOf("com.android.chrome"))
+                    ?.let { intent.setPackage(it) }
+            }
             .launchUrl(context, uri)
     }.recoverCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

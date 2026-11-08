@@ -89,7 +89,7 @@ fun HandoffTutorScreen(nav: Nav, scenarioId: Long) {
                 SubAppPicker(app) { app = it; c.settings.update { st -> st.copy(subscriptionApp = it.id) } }
                 StepCard("1", "${app.label}에서 대화 시작",
                     "버튼을 누르면 ${app.label}가 열려요. " +
-                        if (app.prefill) "입력칸에 지시문이 들어가 있으면 보내기만 누르세요." else "입력칸을 길게 눌러 붙여넣고 보내세요.")
+                        if (app.prefill) "입력칸에 지시문이 들어가 있으면 보내기만 누르세요." else "새 채팅 입력칸을 길게 눌러 붙여넣고 보내세요.")
                 Button(
                     onClick = {
                         scope.launch {

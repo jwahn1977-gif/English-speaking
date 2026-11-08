@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -189,7 +190,14 @@ fun SubscriptionLoginCard(onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp
                         modifier = Modifier.weight(1f),
                     ) { Text("${app.label} 로그인") }
                     Spacer(Modifier.width(8.dp))
-                    Text(if (using) "✅ 사용 중" else "", Modifier.width(72.dp))
+                    Text(
+                        when {
+                            using && s.isLoginConfirmed(app.id) -> "🔐 로그인됨"
+                            using -> "선택됨\n(로그인 필요)"
+                            else -> ""
+                        },
+                        Modifier.width(88.dp), style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
             Text(
@@ -203,6 +211,72 @@ fun SubscriptionLoginCard(onLogin: ((com.jwahn.englishspeaking.ui.handoff.SubApp
                 Text("ChatGPT 비밀번호 재설정")
             }
             if (current != null) TextButton(onClick = { c.settings.update { it.copy(subscriptionApp = "") } }) { Text("구독 계정 사용 해제") }
+        }
+    }
+}
+
+
+/**
+ * 가장 쉬운 '앱 안에서 바로' 연결: Gemini 무료 API 키.
+ * Chrome에서 구글 로그인 → 키 만들기 → 복사 → 앱으로 돌아오면 자동 입력 후 실제로 연결을 확인한다.
+ */
+@Composable
+fun FreeGeminiCard() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var waiting by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val connected = s.hasKey(Provider.GEMINI)
+
+    fun verify(key: String) {
+        checking = true; status = null
+        scope.launch {
+            status = runCatching { c.llm.listModels(Provider.GEMINI, key) }
+                .fold(
+                    { "✅ 연결 확인 완료! 이제 AI 튜터·단어 만들기·뉴스 번역이 앱 안에서 바로 동작해요." },
+                    { "❌ 키 확인 실패: ${it.message}" },
+                )
+            checking = false
+        }
+    }
+
+    ClipboardKeyWatcher(Provider.GEMINI, waiting && !connected) { key ->
+        waiting = false
+        c.settings.update { it.copy(keys = it.keys + (Provider.GEMINI to key), defaultProvider = Provider.GEMINI) }
+        verify(key)
+    }
+
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("⭐ 추천: 무료로 앱 안에서 바로 쓰기 (Gemini)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "구글 계정으로 무료 키를 받으면 AI 튜터 대화·교정·예시 답변·자동 저장·고음질 음성까지 모두 이 앱 안에서 돼요. 다른 앱으로 넘어가지 않아요. (무료 사용량 안에서는 요금이 없어요)",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (connected) {
+                Text(if (checking) "연결 확인 중…" else status ?: "🔐 Gemini 연결됨", fontWeight = FontWeight.Bold)
+                Row {
+                    TextButton(onClick = { verify(s.key(Provider.GEMINI)) }) { Text("연결 다시 확인") }
+                    TextButton(onClick = { c.settings.update { it.copy(keys = it.keys + (Provider.GEMINI to "")) }; status = null }) { Text("연결 해제") }
+                }
+            } else {
+                Text("① 아래 버튼 → Chrome에서 구글 로그인\n② 'API 키 만들기(Create API key)' → 만들어진 키 옆 복사 버튼\n③ 이 앱으로 돌아오면 자동으로 연결돼요",
+                    style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    waiting = true
+                    com.jwahn.englishspeaking.ui.handoff.openInChrome(context, "https://aistudio.google.com/apikey")
+                }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Chrome에서 무료 키 받기") }
+                if (waiting) Text("키를 복사한 뒤 이 앱으로 돌아오세요…", style = MaterialTheme.typography.bodySmall)
+            }
+            status?.takeIf { it.startsWith("❌") }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
