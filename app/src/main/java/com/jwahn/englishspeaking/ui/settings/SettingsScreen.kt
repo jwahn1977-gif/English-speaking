@@ -421,7 +421,9 @@ private fun DisplaySection() {
         }
     }
     Spacer(Modifier.height(8.dp))
-    Text("영어 목소리", fontWeight = FontWeight.SemiBold)
+    VoiceEngineSection()
+    Spacer(Modifier.height(8.dp))
+    Text("휴대폰 음성 고르기", fontWeight = FontWeight.SemiBold)
     var voices by remember { mutableStateOf(c.tts.englishVoices()) }
     var open by remember { mutableStateOf(false) }
     val currentLabel = voices.firstOrNull { it.name == s.ttsVoice }?.label ?: "기기 기본 목소리"
@@ -443,4 +445,58 @@ private fun DisplaySection() {
         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     SwitchRow("대화할 때 예시 답변 보여주기", s.showSuggestions) { v -> c.settings.update { it.copy(showSuggestions = v) } }
     SwitchRow("소리 없이 공부하기 (듣기 문제를 글자로)", s.silentMode) { v -> c.settings.update { it.copy(silentMode = v) } }
+}
+
+@Composable
+private fun VoiceEngineSection() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    val err by c.tts.cloudError.collectAsState()
+    val engine = com.jwahn.englishspeaking.speech.VoiceEngine.of(s.voiceEngine)
+    var cacheMb by remember { mutableStateOf(0L) }
+    LaunchedEffect(s.voiceEngine) { cacheMb = (c.tts.cloud?.cacheSizeBytes() ?: 0L) / (1024 * 1024) }
+
+    Text("읽어 주는 목소리", fontWeight = FontWeight.SemiBold)
+    Text(
+        "AI 고음질 음성은 사람처럼 자연스러워요. 연결해 둔 OpenAI 또는 Gemini 키를 쓰고, 한 번 들은 문장은 폰에 저장돼서 다시 들을 땐 요금·인터넷 없이 바로 나와요.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        com.jwahn.englishspeaking.speech.VoiceEngine.entries.forEach { e ->
+            val available = e.needs == null || s.hasKey(e.needs)
+            FilterChip(
+                selected = engine == e,
+                onClick = { c.settings.update { it.copy(voiceEngine = e.name, cloudVoice = e.defaultVoice) } },
+                label = { Text(e.label + if (!available) " (키 필요)" else "") },
+                enabled = available,
+            )
+        }
+    }
+    if (engine.voices.isNotEmpty()) {
+        val current = s.cloudVoice.ifBlank { engine.defaultVoice }
+        engine.voices.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (id, label) ->
+                    FilterChip(current == id, {
+                        c.settings.update { it.copy(cloudVoice = id) }
+                        c.tts.speak("Hi! I'm your English helper. Let's practice together.")
+                    }, { Text(label) })
+                }
+            }
+        }
+    }
+    if (engine != com.jwahn.englishspeaking.speech.VoiceEngine.DEVICE && engine.needs != null && !s.hasKey(engine.needs)) {
+        Text("이 음성을 쓰려면 AI 연결 > 회사별 키로 직접 연결에서 ${engine.needs.label} 키를 넣어 주세요. (구독 계정과 OpenRouter로는 음성을 만들 수 없어요)",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = { c.tts.speak("Hello! This is how I will read English for you. Can you hear me clearly?") }) { Text("🔊 들어 보기") }
+        if (engine != com.jwahn.englishspeaking.speech.VoiceEngine.DEVICE) {
+            TextButton(onClick = { c.tts.cloud?.clearCache(); cacheMb = 0 }) { Text("저장된 음성 지우기 (${cacheMb}MB)") }
+        }
+    }
+    err?.let {
+        Text("고음질 음성을 못 만들어서 휴대폰 음성으로 읽었어요: $it",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
 }

@@ -38,7 +38,7 @@ class AppContainer(app: Application, val profiles: Profiles = Profiles(app), val
     val llm = LlmClient(settings, http)
     val news = NewsFetcher(http)
     val openRouterAuth = OpenRouterAuth(http)
-    val tts = Tts(app)
+    val tts = Tts(app).also { it.cloud = com.jwahn.englishspeaking.speech.CloudVoice(app, settings, http) }
     val newsPlayer = NewsPlayer(
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
         speaker = Speaker { text, rate -> tts.speakAndWait(text, rate) },

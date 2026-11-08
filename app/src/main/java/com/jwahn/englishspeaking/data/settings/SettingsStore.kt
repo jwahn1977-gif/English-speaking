@@ -54,6 +54,9 @@ data class AppSettings(
     val ttsVoice: String = "",
     /** 구독 계정으로 쓰는 공식 앱: "", CLAUDE, CHATGPT, GEMINI */
     val subscriptionApp: String = "",
+    /** 읽어 주는 목소리: DEVICE / OPENAI / GEMINI */
+    val voiceEngine: String = "DEVICE",
+    val cloudVoice: String = "",
 ) {
     fun key(p: Provider) = keys[p].orEmpty()
     fun model(p: Provider) = models[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
@@ -126,6 +129,8 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             dailyAiLimit = p.getInt("daily_ai_limit", 0),
             ttsVoice = p.getString("tts_voice", "") ?: "",
             subscriptionApp = p.getString("subscription_app", "") ?: "",
+            voiceEngine = p.getString("voice_engine", "DEVICE") ?: "DEVICE",
+            cloudVoice = p.getString("cloud_voice", "") ?: "",
         )
     }
 
@@ -155,6 +160,8 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             putInt("daily_ai_limit", s.dailyAiLimit)
             putString("tts_voice", s.ttsVoice)
             putString("subscription_app", s.subscriptionApp)
+            putString("voice_engine", s.voiceEngine)
+            putString("cloud_voice", s.cloudVoice)
         }.apply()
         _state.value = s
     }

@@ -185,6 +185,7 @@ class AppSmokeTest {
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         tab("패턴")
+        scrollTo("I'm looking for ", substring = true)
         waitText("I'm looking for ", substring = true)
         tab("AI 튜터")
         waitText("카페에서 주문하기")
@@ -390,7 +391,7 @@ class AppSmokeTest {
         waitText("가져온 결과: 패턴 1 · 단어 1")
         clickText("모두 저장")
         rule.waitUntil(10_000) { runBlocking { container.db.patterns().byTemplate("Could I get ~?") != null } }
-        runBlocking { assertNotNull(container.db.vocab().findWord("decaf")) }
+        rule.waitUntil(10_000) { runBlocking { container.db.vocab().findWord("decaf") != null } }
     }
 
     private fun findWebView(): android.webkit.WebView {

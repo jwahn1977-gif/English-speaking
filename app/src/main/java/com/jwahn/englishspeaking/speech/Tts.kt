@@ -1,6 +1,15 @@
 package com.jwahn.englishspeaking.speech
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.PlaybackParams
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -46,8 +55,62 @@ class Tts(context: Context) {
     private fun applyVoice() {
         val t = tts ?: return
         if (!_ready.value) return
-        val v = if (voiceName.isBlank()) null else runCatching { t.voices?.firstOrNull { it.name == voiceName } }.getOrNull()
+        val v = if (voiceName.isBlank()) bestVoice(t) else runCatching { t.voices?.firstOrNull { it.name == voiceName } }.getOrNull()
         if (v != null) t.voice = v else t.language = Locale.US
+    }
+
+    /** 따로 고르지 않았으면 기기에 있는 미국 영어 목소리 중 가장 자연스러운 것 */
+    private fun bestVoice(t: TextToSpeech): android.speech.tts.Voice? = runCatching {
+        t.voices.orEmpty()
+            .filter { it.locale.language == "en" && it.locale.country == "US" && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            .sortedWith(compareByDescending<android.speech.tts.Voice> { it.quality }.thenBy { it.isNetworkConnectionRequired }.thenBy { it.latency })
+            .firstOrNull()
+    }.getOrNull()
+
+    /** AI 고음질 음성 (설정에서 켰고 키가 있을 때) */
+    var cloud: CloudVoice? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var cloudJob: Job? = null
+    private var player: MediaPlayer? = null
+
+    /** 마지막 고음질 음성 오류 (설정 화면 안내용) */
+    private val _cloudError = MutableStateFlow<String?>(null)
+    val cloudError: StateFlow<String?> = _cloudError
+
+    private fun playCloud(text: String, speed: Float, id: String, onDone: (() -> Unit)?, fallback: () -> Unit) {
+        val engine = cloud ?: return fallback()
+        cloudJob?.cancel()
+        cloudJob = scope.launch {
+            val file = runCatching { engine.fetch(text) }
+                .onFailure { _cloudError.value = it.message }
+                .getOrNull()
+            if (currentId != id) return@launch
+            if (file == null) { fallback(); return@launch }
+            _cloudError.value = null
+            releasePlayer()
+            runCatching {
+                MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+                    )
+                    setDataSource(file.path)
+                    prepare()
+                    runCatching { playbackParams = PlaybackParams().setSpeed(speed.coerceIn(0.5f, 2f)).setPitch(1f) }
+                    setOnCompletionListener { finish(id) }
+                    setOnErrorListener { _, _, _ -> finish(id); true }
+                    if (onDone != null) callbacks[id] = onDone
+                    _speaking.value = true
+                    start()
+                    player = this
+                }
+            }.onFailure { _cloudError.value = "재생 실패: ${it.message}"; fallback() }
+        }
+    }
+
+    private fun releasePlayer() {
+        player?.let { p -> runCatching { if (p.isPlaying) p.stop() }; p.release() }
+        player = null
     }
 
     private var tts: TextToSpeech? = null
@@ -97,7 +160,9 @@ class Tts(context: Context) {
         if (!fromPlayer) onUserSpeak?.invoke()
         val id = UUID.randomUUID().toString()
         currentId = id
-        val action = {
+        tts?.stop()
+        releasePlayer()
+        val deviceSpeak = {
             val t = tts
             if (t != null && currentId == id) {
                 callbacks.clear()
@@ -106,7 +171,11 @@ class Tts(context: Context) {
                 t.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
             }
         }
-        if (_ready.value) action() else pending += action
+        val action = deviceSpeak
+        if (cloud?.enabled() == true) {
+            callbacks.clear()
+            playCloud(text, rateOverride ?: rate, id, onDone) { if (_ready.value) action() else pending += action }
+        } else if (_ready.value) action() else pending += action
         return id
     }
 
@@ -121,11 +190,15 @@ class Tts(context: Context) {
     fun stop() {
         currentId = null
         callbacks.clear()
+        cloudJob?.cancel()
+        releasePlayer()
         tts?.stop()
         _speaking.value = false
     }
 
     fun shutdown() {
+        releasePlayer()
+        scope.cancel()
         tts?.shutdown()
         tts = null
     }
