@@ -131,7 +131,8 @@ fun looksLikeKey(p: Provider, text: String): Boolean {
         Provider.OPENROUTER -> t.startsWith("sk-or-")
         Provider.CLAUDE -> t.startsWith("sk-ant-")
         Provider.OPENAI -> t.startsWith("sk-") && !t.startsWith("sk-ant-") && !t.startsWith("sk-or-")
-        Provider.GEMINI -> t.startsWith("AIza")
+        // 보통 AIza로 시작하지만, 다른 형식이어도 키처럼 생겼으면 받는다 (연결 확인은 서버로 한 번 더)
+        Provider.GEMINI -> t.startsWith("AIza") || (t.length in 30..120 && t.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' })
     }
 }
 
@@ -142,15 +143,24 @@ fun looksLikeKey(p: Provider, text: String): Boolean {
 @Composable
 fun ClipboardKeyWatcher(p: Provider, waiting: Boolean, onKey: (String) -> Unit) {
     val context = LocalContext.current
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (!waiting) return@LifecycleEventEffect
-        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() }.getOrNull().orEmpty()
+    // 안드로이드 10+는 앱 창이 '포커스'를 얻은 뒤에만 클립보드를 읽을 수 있다 → 포커스를 기다렸다가 읽는다
+    val focused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+    var resumes by remember { mutableStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumes++ }
+    androidx.compose.runtime.LaunchedEffect(focused, resumes, waiting) {
+        if (!waiting || !focused) return@LaunchedEffect
+        kotlinx.coroutines.delay(300)
+        val text = readClipboardText(context)
         if (looksLikeKey(p, text)) {
             onKey(text.trim())
             Toast.makeText(context, "복사한 ${p.label} 키를 넣었어요.", Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+fun readClipboardText(context: Context): String {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    return runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() }.getOrNull().orEmpty().trim()
 }
 
 @Composable
@@ -275,6 +285,26 @@ fun FreeGeminiCard() {
                     com.jwahn.englishspeaking.ui.handoff.openInChrome(context, "https://aistudio.google.com/apikey")
                 }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Chrome에서 무료 키 받기") }
                 if (waiting) Text("키를 복사한 뒤 이 앱으로 돌아오세요…", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Text("자동으로 안 들어가면: 아래 '📋 붙여넣기'를 누르세요", fontWeight = FontWeight.SemiBold)
+                var manual by remember { mutableStateOf("") }
+                androidx.compose.material3.OutlinedTextField(
+                    value = manual, onValueChange = { manual = it.trim() },
+                    label = { Text("Gemini API 키") }, placeholder = { Text("AIza...") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    OutlinedButton(onClick = {
+                        val t = readClipboardText(context)
+                        if (t.isBlank()) Toast.makeText(context, "복사된 내용이 없어요. AI Studio에서 키 옆 복사 버튼을 눌러 주세요.", Toast.LENGTH_LONG).show()
+                        else manual = t
+                    }) { Text("📋 붙여넣기") }
+                    Button(enabled = manual.length >= 20, onClick = {
+                        waiting = false
+                        c.settings.update { it.copy(keys = it.keys + (Provider.GEMINI to manual), defaultProvider = Provider.GEMINI) }
+                        verify(manual)
+                    }) { Text("연결하기") }
+                }
             }
             status?.takeIf { it.startsWith("❌") }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }

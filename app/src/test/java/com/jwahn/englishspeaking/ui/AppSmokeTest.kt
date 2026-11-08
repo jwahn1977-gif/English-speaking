@@ -499,6 +499,22 @@ class AppSmokeTest {
         waitText("Claude 앱으로 넘어갔어요", substring = true)
     }
 
+    /** 자동 입력이 안 될 때: 붙여넣기 버튼 → 연결하기 */
+    @Test
+    fun free_gemini_key_manual_paste() {
+        passOnboarding()
+        tab("홈")
+        rule.onNodeWithContentDescription("설정").performClick()
+        val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
+        rule.activity.runOnUiThread { cm.setPrimaryClip(android.content.ClipData.newPlainText("k", "  AIzaSyManualKey1234567890abcdefgh  ")) }
+        clickText("📋 붙여넣기")
+        clickText("연결하기")
+        waitText("연결 확인 완료", substring = true)
+        assertEquals("AIzaSyManualKey1234567890abcdefgh", container.settings.current.key(Provider.GEMINI))
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        waitText("Gemini 연결됨", substring = true)
+    }
+
     private fun findWebView(): android.webkit.WebView {
         fun search(v: android.view.View): android.webkit.WebView? = when (v) {
             is android.webkit.WebView -> v
