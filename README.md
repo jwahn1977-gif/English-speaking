@@ -41,6 +41,7 @@
 ```
 
 - 계획과 진행 현황: [PLAN.md](PLAN.md)
+- 편의성·전문성·접근성 검토: [docs/REVIEW.md](docs/REVIEW.md)
 
 ### 서명 키 (업데이트 설치용)
 
