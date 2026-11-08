@@ -22,6 +22,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Download Gradle (네트워크 지연 대비 재시도)
+        run: |
+          for i in 1 2 3; do ./gradlew --version && break || sleep 20; done
+
       - name: Unit tests (학습 로직 + 화면 흐름)
         run: ./gradlew testDebugUnitTest --no-daemon
 

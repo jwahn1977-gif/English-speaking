@@ -50,7 +50,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.jwahn.englishspeaking.Notifications
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jwahn.englishspeaking.data.PatternDraft
@@ -110,10 +114,15 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
         if (l.sentences.isEmpty()) {
             EmptyState("😅", "문장이 없어요", "다른 기사를 골라 주세요.", mod); return@Screen
         }
-        var index by remember { mutableIntStateOf(l.entity.lastPosition.coerceIn(0, l.sentences.lastIndex)) }
-        var playing by remember { mutableStateOf(false) }
-        var rate by remember { mutableFloatStateOf(settings.ttsRate) }
-        var repeatCount by remember { mutableIntStateOf(1) }
+        val player = c.newsPlayer
+        // 이 기사를 플레이어에 올린다 (이미 듣던 기사면 위치 유지)
+        LaunchedEffect(l.entity.id) {
+            player.load(l.entity.id, l.title, l.sentences.map { it.en }, l.entity.lastPosition, settings.ttsRate)
+        }
+        val ps by player.state.collectAsState()
+        val mine = ps.lessonId == l.entity.id
+        val index = if (mine) ps.index else l.entity.lastPosition.coerceIn(0, l.sentences.lastIndex)
+        val playing = mine && ps.playing
         var showEn by remember { mutableStateOf(true) }
         var showKo by remember { mutableStateOf(settings.showKorean) }
         var tab by remember { mutableIntStateOf(0) }
@@ -121,28 +130,14 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
         var shadowIdx by remember { mutableIntStateOf(-1) }
         val speech = rememberSpeechInput { s -> spoken = shadowIdx to s; scope.launch { c.repo.recordActivity(sentences = 1) } }
         val listState = rememberLazyListState()
-
-        // 재생 중에는 화면 꺼짐 방지
-        val view = LocalView.current
-        DisposableEffect(playing) {
-            view.keepScreenOn = playing
-            onDispose { view.keepScreenOn = false }
+        val context = LocalContext.current
+        val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { player.play() }
+        fun startPlaying() {
+            if (Notifications.needsPermission(context)) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else player.play()
         }
-        DisposableEffect(Unit) { onDispose { c.tts.stop() } }
 
-        // 문장 단위 재생 루프: 한 문장을 repeat번 읽고 다음 문장으로
-        LaunchedEffect(playing, index) {
-            c.db.news().updateLessonPosition(id, index)
-            if (tab == 0) listState.animateScrollToItem(index + 1)
-            if (!playing) return@LaunchedEffect
-            repeat(repeatCount) { r ->
-                c.tts.speakAndWait(l.sentences[index].en, rate)
-                if (r < repeatCount - 1) delay(700)
-            }
-            c.repo.recordActivity(listened = 1)
-            delay(400)
-            if (index < l.sentences.lastIndex) index++ else playing = false
-        }
+        LaunchedEffect(index) { if (tab == 0) listState.animateScrollToItem(index + 1) }
 
         Column(mod) {
             TabRow(selectedTabIndex = tab) {
@@ -169,7 +164,7 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
                                         if (current) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                         RoundedCornerShape(10.dp),
                                     )
-                                    .clickable { index = i; playing = true }
+                                    .clickable { if (mine) player.seek(i, autoplay = true) }
                                     .padding(10.dp),
                             ) {
                                 Row(verticalAlignment = Alignment.Top) {
@@ -184,7 +179,7 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
                                         if (showKo && s.ko.isNotBlank()) Text(s.ko, style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(onClick = { playing = false; shadowIdx = i; spoken = null; speech("en-US", s.en) }, modifier = Modifier.size(36.dp)) {
+                                    IconButton(onClick = { player.pause(); shadowIdx = i; spoken = null; speech("en-US", s.en) }, modifier = Modifier.size(36.dp)) {
                                         Icon(Icons.Default.Mic, "따라 말하기")
                                     }
                                 }
@@ -213,16 +208,16 @@ fun NewsLessonScreen(nav: Nav, id: Long) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
                     LinearProgressIndicator(progress = { (index + 1) / l.sentences.size.toFloat() }, modifier = Modifier.fillMaxWidth())
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { if (index > 0) index-- }) { Icon(Icons.Default.SkipPrevious, "이전 문장") }
-                        FilledIconButton(onClick = { if (playing) { playing = false; c.tts.stop() } else playing = true }, modifier = Modifier.size(56.dp)) {
+                        IconButton(onClick = player::prev) { Icon(Icons.Default.SkipPrevious, "이전 문장") }
+                        FilledIconButton(onClick = { if (playing) player.pause() else startPlaying() }, modifier = Modifier.size(56.dp)) {
                             Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "일시정지" else "재생", Modifier.size(32.dp))
                         }
-                        IconButton(onClick = { if (index < l.sentences.lastIndex) index++ }) { Icon(Icons.Default.SkipNext, "다음 문장") }
+                        IconButton(onClick = player::next) { Icon(Icons.Default.SkipNext, "다음 문장") }
                         SpeakIcon(l.sentences[index].en, rate = 0.7f)
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(0.7f, 0.85f, 1.0f, 1.2f).forEach { r -> FilterChip(rate == r, { rate = r }, { Text("${r}x") }) }
-                        listOf(1, 2, 3).forEach { n -> FilterChip(repeatCount == n, { repeatCount = n }, { Text("${n}회 반복") }) }
+                        listOf(0.7f, 0.85f, 1.0f, 1.2f).forEach { r -> FilterChip(ps.rate == r, { player.setRate(r) }, { Text("${r}x") }) }
+                        listOf(1, 2, 3).forEach { n -> FilterChip(ps.repeat == n, { player.setRepeat(n) }, { Text("${n}회 반복") }) }
                         FilterChip(showEn, { showEn = !showEn }, { Text("영어 자막") })
                         FilterChip(showKo, { showKo = !showKo }, { Text("한국어") })
                     }

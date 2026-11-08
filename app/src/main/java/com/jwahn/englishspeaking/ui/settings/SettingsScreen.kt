@@ -1,6 +1,9 @@
 package com.jwahn.englishspeaking.ui.settings
 
+import android.Manifest
 import android.widget.Toast
+import com.jwahn.englishspeaking.Notifications
+import com.jwahn.englishspeaking.reminder.Reminder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -150,6 +153,9 @@ fun SettingsScreen(nav: Nav) {
                 valueRange = 10f..100f, steps = 8,
             )
 
+            SectionTitle("복습 알림")
+            ReminderSection()
+
             SectionTitle("백업 · 가족과 공유")
             Text(
                 "단어장, 패턴, 내가 만든 시나리오, 뉴스 피드를 파일로 저장해요. 다른 가족 폰에서 '가져오기'를 하면 그대로 합쳐집니다.",
@@ -244,4 +250,38 @@ private fun ProviderCard(p: Provider, link: String) {
         }
     }
     HorizontalDivider(Modifier.padding(vertical = 2.dp), color = MaterialTheme.colorScheme.surface)
+}
+
+@Composable
+private fun ReminderSection() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    val context = LocalContext.current
+    fun apply(enabled: Boolean, hour: Int, minute: Int) {
+        c.settings.update { it.copy(reminderEnabled = enabled, reminderHour = hour, reminderMinute = minute) }
+        Reminder.schedule(context, enabled, hour, minute)
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) apply(true, s.reminderHour, s.reminderMinute)
+        else Toast.makeText(context, "알림 권한이 없어서 복습 알림을 켤 수 없어요.", Toast.LENGTH_LONG).show()
+    }
+    SwitchRow("매일 복습 알림 받기", s.reminderEnabled) { on ->
+        if (on && Notifications.needsPermission(context)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else apply(on, s.reminderHour, s.reminderMinute)
+    }
+    if (s.reminderEnabled) {
+        Text("알림 시간: %02d:%02d".format(s.reminderHour, s.reminderMinute))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(7, 8, 12, 18, 20, 21, 22).forEach { h ->
+                FilterChip(s.reminderHour == h, { apply(true, h, s.reminderMinute) }, { Text("${h}시") })
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0, 15, 30, 45).forEach { m ->
+                FilterChip(s.reminderMinute == m, { apply(true, s.reminderHour, m) }, { Text("%02d분".format(m)) })
+            }
+        }
+        Text("복습할 단어·패턴이 있거나 오늘 아직 공부를 안 했을 때만 알려줘요.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }

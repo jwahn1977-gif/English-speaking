@@ -21,6 +21,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) (application as App).container.tts.stop()
+        val c = (application as App).container
+        // 뉴스를 듣는 중이면 백그라운드에서도 계속 재생
+        if (!isChangingConfigurations && !c.newsPlayer.state.value.playing) c.tts.stop()
     }
 }

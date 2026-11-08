@@ -15,7 +15,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
@@ -136,6 +139,7 @@ fun NewsScreen(nav: Nav) {
         },
     ) { mod ->
         Column(mod) {
+            NowPlayingBar(onOpen = { nav.newsLesson(it) })
             TabRow(selectedTabIndex = tab) {
                 Tab(tab == 0, { tab = 0 }, text = { Text("최신 뉴스") })
                 Tab(tab == 1, { tab = 1 }, text = { Text("들은 기사 (${lessons.size})") })
@@ -342,4 +346,28 @@ private fun FeedRow(f: NewsFeedEntity, onToggle: (Boolean) -> Unit, onDelete: ()
         }
     }
     Spacer(Modifier.width(1.dp))
+}
+
+/** 다른 화면에 있어도 지금 듣는 기사를 보여주고 바로 조작 */
+@Composable
+fun NowPlayingBar(onOpen: (Long) -> Unit) {
+    val player = LocalContainer.current.newsPlayer
+    val ps by player.state.collectAsState()
+    if (!ps.active) return
+    Card(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(ps.lessonId) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                Text((if (ps.playing) "🎧 듣는 중 · " else "⏸ 일시정지 · ") + "${ps.index + 1}/${ps.sentences.size}",
+                    style = MaterialTheme.typography.labelSmall)
+                Text(ps.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = player::toggle) {
+                Icon(if (ps.playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (ps.playing) "일시정지" else "재생")
+            }
+            IconButton(onClick = player::close) { Icon(Icons.Default.Close, "듣기 종료") }
+        }
+    }
 }

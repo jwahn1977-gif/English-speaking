@@ -205,6 +205,40 @@ class AppSmokeTest {
         runBlocking {
             assertNotNull(container.db.news().lessonFor("https://example.com/news/1", "ORIGINAL"))
         }
+        // 재생 → 백그라운드 서비스 시작 → 화면을 나가도 계속 재생 상태
+        org.robolectric.Shadows.shadowOf(rule.activity.application)
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        clickText("문장 2")
+        rule.onNodeWithContentDescription("재생").performClick()
+        rule.waitForIdle()
+        rule.waitUntil(5_000) { container.newsPlayer.state.value.playing }
+        val started = org.robolectric.Shadows.shadowOf(rule.activity.application).nextStartedService
+        assertEquals("com.jwahn.englishspeaking.news.NewsPlaybackService", started?.component?.className)
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        tab("홈")
+        waitText("듣는 중", substring = true)
+        assertTrue(container.newsPlayer.state.value.playing)
+        rule.onNodeWithContentDescription("듣기 종료").performClick()
+        rule.waitForIdle()
+        assertTrue(!container.newsPlayer.state.value.active)
+    }
+
+    @Test
+    fun reminder_worker_posts_notification_when_reviews_due() {
+        org.robolectric.Shadows.shadowOf(rule.activity.application)
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        waitText("단어장")
+        runBlocking {
+            val w = container.db.vocab().findWord("breakfast")!!
+            container.db.vocab().updateWord(w.copy(box = 1, nextDue = 0))
+            val worker = androidx.work.testing.TestListenableWorkerBuilder<com.jwahn.englishspeaking.reminder.ReminderWorker>(rule.activity.application).build()
+            assertEquals(androidx.work.ListenableWorker.Result.success(), worker.doWork())
+        }
+        val nm = rule.activity.getSystemService(android.app.NotificationManager::class.java)
+        val posted = org.robolectric.Shadows.shadowOf(nm).allNotifications
+        assertEquals(1, posted.size)
+        val text = posted[0].extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString()
+        assertTrue(text, text.contains("단어 1개"))
     }
 
     @Test

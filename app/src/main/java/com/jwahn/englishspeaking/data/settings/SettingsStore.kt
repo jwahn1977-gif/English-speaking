@@ -28,6 +28,9 @@ data class AppSettings(
     val tutorLevel: TutorLevel = TutorLevel.AUTO,
     val dailyGoal: Int = 20,
     val nickname: String = "",
+    val reminderEnabled: Boolean = false,
+    val reminderHour: Int = 20,
+    val reminderMinute: Int = 0,
 ) {
     fun key(p: Provider) = keys[p].orEmpty()
     fun model(p: Provider) = models[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
@@ -72,6 +75,9 @@ class SettingsStore(context: Context) {
             .getOrDefault(TutorLevel.AUTO),
         dailyGoal = prefs.getInt("daily_goal", 20),
         nickname = prefs.getString("nickname", "") ?: "",
+        reminderEnabled = prefs.getBoolean("reminder_on", false),
+        reminderHour = prefs.getInt("reminder_hour", 20),
+        reminderMinute = prefs.getInt("reminder_minute", 0),
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -88,6 +94,9 @@ class SettingsStore(context: Context) {
             putString("tutor_level", s.tutorLevel.name)
             putInt("daily_goal", s.dailyGoal)
             putString("nickname", s.nickname)
+            putBoolean("reminder_on", s.reminderEnabled)
+            putInt("reminder_hour", s.reminderHour)
+            putInt("reminder_minute", s.reminderMinute)
         }.apply()
         _state.value = s
     }

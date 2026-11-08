@@ -92,6 +92,7 @@ fun HomeScreen(nav: Nav) {
         actions = { IconButton(onClick = nav::settings) { Icon(Icons.Default.Settings, "설정") } },
     ) { mod ->
         Column(mod.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            com.jwahn.englishspeaking.ui.news.NowPlayingBar(onOpen = { nav.newsLesson(it) })
             if (!settings.anyConnected) {
                 Card(
                     Modifier.fillMaxWidth().padding(top = 8.dp).clickable { nav.settings() },
