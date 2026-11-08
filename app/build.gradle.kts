@@ -14,8 +14,8 @@ android {
         applicationId = "com.jwahn.englishspeaking"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3.3"
+        versionCode = 7
+        versionName = "0.3.4"
     }
 
     // 서명 키: 저장소에 넣지 않는다.
@@ -93,6 +93,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.browser:browser:1.8.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

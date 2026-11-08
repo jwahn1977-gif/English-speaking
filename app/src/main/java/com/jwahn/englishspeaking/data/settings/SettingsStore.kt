@@ -54,6 +54,8 @@ data class AppSettings(
     val ttsVoice: String = "",
     /** 구독 계정으로 쓰는 공식 앱: "", CLAUDE, CHATGPT, GEMINI */
     val subscriptionApp: String = "",
+    /** 기본은 Chrome 창. 사용자가 '앱 안 화면'을 고른 서비스만 여기에 (CLAUDE,CHATGPT 쉼표 구분) */
+    val inAppApps: String = "",
     /** 읽어 주는 목소리: DEVICE / OPENAI / GEMINI */
     val voiceEngine: String = "DEVICE",
     val cloudVoice: String = "",
@@ -65,6 +67,13 @@ data class AppSettings(
     val anyConnected: Boolean get() = connectedProviders.isNotEmpty()
     /** API는 없고 구독 계정(공식 앱)으로만 쓰는 상태 */
     val subscriptionOnly: Boolean get() = !anyConnected && subscriptionApp.isNotBlank()
+    /** Chrome 창으로 여는지 (기본: 예. Gemini는 구글 전용이라 항상) */
+    fun opensExternally(appId: String) = appId == "GEMINI" || appId !in inAppApps.split(",")
+    fun withExternal(appId: String, on: Boolean): AppSettings {
+        val set = inAppApps.split(",").filter { it.isNotBlank() }.toMutableSet()
+        if (on) set -= appId else set += appId
+        return copy(inAppApps = set.joinToString(","))
+    }
     /** 왕초보·어린이처럼 도움이 많이 필요한 학습자 */
     val isBeginner: Boolean get() = learner == Learner.KIDS || learner == Learner.STARTER || learner == Learner.BASIC
 }
@@ -129,6 +138,7 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             dailyAiLimit = p.getInt("daily_ai_limit", 0),
             ttsVoice = p.getString("tts_voice", "") ?: "",
             subscriptionApp = p.getString("subscription_app", "") ?: "",
+            inAppApps = p.getString("in_app_apps", "") ?: "",
             voiceEngine = p.getString("voice_engine", "DEVICE") ?: "DEVICE",
             cloudVoice = p.getString("cloud_voice", "") ?: "",
         )
@@ -160,6 +170,7 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             putInt("daily_ai_limit", s.dailyAiLimit)
             putString("tts_voice", s.ttsVoice)
             putString("subscription_app", s.subscriptionApp)
+            putString("in_app_apps", s.inAppApps)
             putString("voice_engine", s.voiceEngine)
             putString("cloud_voice", s.cloudVoice)
         }.apply()

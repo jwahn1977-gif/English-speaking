@@ -360,29 +360,36 @@ class AppSmokeTest {
         waitText("웹 로그인으로 연결하기")
     }
 
-    /** 구독 계정: 앱 안에서 로그인 → 튜터가 앱 안 대화 화면으로 바로 열림 → 결과 가져와 저장 */
+    private fun nextOpenedUrl(): String {
+        val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
+        rule.waitUntil(10_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        return shadowApp.nextStartedActivity?.data?.toString().orEmpty()
+    }
+
+    /** 구독 계정: Chrome에서 로그인 → 튜터가 Chrome으로 지시문과 함께 열림 → 결과 가져와 저장 */
     @Test
-    fun subscription_login_in_app_chat_and_import() {
+    fun subscription_login_chrome_and_import() {
         passOnboarding()
         tab("홈")
         rule.onNodeWithContentDescription("설정").performClick()
         clickText("Claude 로그인")
-        waitText("처음 한 번 로그인하면", substring = true)
+        waitText("Chrome 창에서 열려 있어요", substring = true)
         assertEquals("CLAUDE", container.settings.current.subscriptionApp)
-        val web = org.robolectric.Shadows.shadowOf(findWebView())
-        assertEquals("https://claude.ai/login", web.lastLoadedUrl)
+        assertEquals("https://claude.ai/login", nextOpenedUrl())
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
 
         tab("AI 튜터")
         clickText("카페에서 주문하기")
-        waitText("수업 지시문이 입력칸에", substring = true)
-        val url = org.robolectric.Shadows.shadowOf(findWebView()).lastLoadedUrl
+        waitText("Chrome 창에서 열려 있어요", substring = true)
+        val url = nextOpenedUrl()
         assertTrue(url, url.startsWith("https://claude.ai/new?q=") && url.contains("role-play"))
         val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
         assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("role-play"))
 
-        // END 후 마지막 답을 복사했다고 가정
         val reply = "잘했어요!\n```json\n" +
             "{\"patterns\":[{\"pattern\":\"Could I get ~?\",\"meaning_ko\":\"~ 주실 수 있나요?\",\"example_en\":\"Could I get a latte?\",\"example_ko\":\"라테 주실 수 있나요?\"}]," +
             "\"words\":[{\"word\":\"decaf\",\"ipa\":\"ˈdiːkæf\",\"meaning_ko\":\"디카페인 커피\",\"example_en\":\"A decaf, please.\",\"example_ko\":\"디카페인 주세요.\"}]}\n```"
@@ -392,6 +399,49 @@ class AppSmokeTest {
         clickText("모두 저장")
         rule.waitUntil(10_000) { runBlocking { container.db.patterns().byTemplate("Could I get ~?") != null } }
         rule.waitUntil(10_000) { runBlocking { container.db.vocab().findWord("decaf") != null } }
+    }
+
+    /** 구글 로그인: Gemini는 Chrome 창으로 열리고, 비밀번호 찾기는 구글 계정 복구로 */
+    @Test
+    fun google_login_opens_chrome_and_password_recovery() {
+        assertTrue(com.jwahn.englishspeaking.ui.handoff.isGoogleSignIn("https://accounts.google.com/v3/signin/identifier?x=1"))
+        assertTrue(!com.jwahn.englishspeaking.ui.handoff.isGoogleSignIn("https://claude.ai/login"))
+        passOnboarding()
+        tab("홈")
+        rule.onNodeWithContentDescription("설정").performClick()
+        val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
+        clickText("구글 계정 비밀번호 찾기")
+        rule.waitUntil(5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        assertEquals("https://accounts.google.com/signin/recovery", shadowApp.nextStartedActivity?.data?.toString())
+        assertTrue(container.settings.current.opensExternally("CLAUDE")) // 기본은 Chrome
+
+        clickText("Gemini 로그인")
+        waitText("Chrome 창에서 열려 있어요", substring = true)
+        rule.waitUntil(5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        assertEquals("https://gemini.google.com/app", shadowApp.nextStartedActivity?.data?.toString())
+        clickText("로그인이 안 돼요? · 비밀번호 찾기")
+        waitText("Gemini 로그인 도움말")
+        clickText("구글 비밀번호 찾기")
+        rule.waitUntil(5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        assertEquals("https://accounts.google.com/signin/recovery", shadowApp.nextStartedActivity?.data?.toString())
+
+        // 원하면 앱 안 화면으로 바꿀 수 있다 (Claude·ChatGPT만)
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        clickText("Claude 로그인")
+        nextOpenedUrl()
+        clickText("앱 안 화면으로 쓰기 (이메일 로그인만 가능)")
+        assertTrue(!container.settings.current.opensExternally("CLAUDE"))
+        assertEquals("https://claude.ai/login", org.robolectric.Shadows.shadowOf(findWebView()).lastLoadedUrl)
+        assertTrue(container.settings.current.opensExternally("GEMINI"))
     }
 
     private fun findWebView(): android.webkit.WebView {

@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +83,14 @@ fun WebChatScreen(nav: Nav, appId: String) {
     var menu by remember { mutableStateOf(false) }
     var imported by remember { mutableStateOf<Imported?>(null) }
     var pendingMic by remember { mutableStateOf<PermissionRequest?>(null) }
+    val appSettings by c.settings.state.collectAsState()
+    // 구글 로그인이 필요한 경우 Chrome 창으로 (Gemini는 구글 계정 전용이라 항상)
+    val external = appSettings.opensExternally(app.id)
+    var googleBlocked by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(external) {
+        if (external) { prompt?.let { copyText(context, it) }; openInChrome(context, startUrl) }
+    }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         pendingMic?.let { if (granted) it.grant(it.resources) else it.deny() }
@@ -92,6 +101,44 @@ fun WebChatScreen(nav: Nav, appId: String) {
 
     BackHandler(enabled = canGoBack) { webView?.goBack() }
     DisposableEffect(Unit) { onDispose { CookieManager.getInstance().flush() } }
+
+    if (googleBlocked) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { googleBlocked = false },
+        title = { Text("구글 로그인은 Chrome에서 해요") },
+        text = { Text("구글은 보안 때문에 다른 앱 안의 화면에서 구글 계정 로그인을 막아요. 비밀번호가 맞아도 '안전하지 않은 브라우저' 오류가 나요.\n\nChrome 창으로 열면 정상적으로 로그인되고, 다음부터는 자동으로 Chrome에서 열려요.") },
+        confirmButton = {
+            Button(onClick = {
+                googleBlocked = false
+                c.settings.update { it.withExternal(app.id, true) }
+            }) { Text("Chrome으로 열기") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { googleBlocked = false; openInChrome(context, LoginHelp.GOOGLE_RECOVERY) }) { Text("비밀번호 찾기") }
+                TextButton(onClick = { googleBlocked = false }) { Text("이메일로 로그인") }
+            }
+        },
+    )
+
+    if (helpOpen) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { helpOpen = false },
+        title = { Text("${app.label} 로그인 도움말") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(LoginHelp.note(app))
+                Text("구글 계정 비밀번호를 잊었다면 '구글 비밀번호 찾기'를 누르세요. 휴대폰 번호나 복구 이메일로 본인 확인 후 새 비밀번호를 만들 수 있어요.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                TextButton(onClick = { helpOpen = false; openInChrome(context, LoginHelp.GOOGLE_RECOVERY) }) { Text("구글 비밀번호 찾기") }
+                if (app == SubApp.CHATGPT) TextButton(onClick = { helpOpen = false; openInChrome(context, LoginHelp.OPENAI_RESET) }) { Text("ChatGPT 비밀번호 재설정") }
+                if (!external) TextButton(onClick = { helpOpen = false; c.settings.update { it.withExternal(app.id, true) } }) { Text("Chrome으로 열기 (구글 로그인)") }
+                TextButton(onClick = { helpOpen = false }) { Text("닫기") }
+            }
+        },
+    )
 
     Screen(
         title = app.label,
@@ -121,13 +168,18 @@ fun WebChatScreen(nav: Nav, appId: String) {
     ) { mod ->
         Column(mod) {
             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-                Text(
-                    if (prompt != null)
-                        "수업 지시문이 입력칸에 들어가 있어요(안 보이면 길게 눌러 붙여넣기). 영어로 대화하고, 끝나면 END → 마지막 답 복사 → 위의 '결과 가져오기'."
-                    else "처음 한 번 로그인하면 다음부터는 바로 열려요. 구글 로그인이 막히면 이메일로 로그인하거나, ⋮ 메뉴에서 앱으로 여세요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                )
+                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(
+                        when {
+                            external -> "Chrome 창에서 ${app.label}가 열려요. " +
+                                (if (prompt != null) "지시문이 입력칸에 들어가 있어요(안 보이면 길게 눌러 붙여넣기). 대화를 마치면 END → 마지막 답 복사 → 이 화면으로 돌아와 위의 '결과 가져오기'." else "구글 계정으로 로그인하면 Chrome에 계속 남아요.")
+                            prompt != null -> "수업 지시문이 입력칸에 들어가 있어요(안 보이면 길게 눌러 붙여넣기). 영어로 대화하고, 끝나면 END → 마지막 답 복사 → 위의 '결과 가져오기'."
+                            else -> "처음 한 번 로그인하면 다음부터는 바로 열려요."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TextButton(onClick = { helpOpen = true }) { Text("로그인이 안 돼요? · 비밀번호 찾기") }
+                }
             }
             imported?.let { im ->
                 Surface(tonalElevation = 2.dp) {
@@ -154,6 +206,20 @@ fun WebChatScreen(nav: Nav, appId: String) {
                     }
                 }
             }
+            if (external) {
+                Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("🌐 ${app.label}는 Chrome 창에서 열려 있어요", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text("Chrome에서 로그인하면 다음부터는 바로 열려요(구글 계정 로그인 가능). 대화가 끝나면 마지막 답을 복사하고 이 화면으로 돌아와 위의 '결과 가져오기'를 누르세요.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = { prompt?.let { copyText(context, it) }; openInChrome(context, startUrl) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Text("Chrome에서 ${app.label} 다시 열기")
+                    }
+                    if (app != SubApp.GEMINI) TextButton(onClick = { c.settings.update { it.withExternal(app.id, false) } }) {
+                        Text("앱 안 화면으로 쓰기 (이메일 로그인만 가능)")
+                    }
+                }
+                return@Column
+            }
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -168,6 +234,12 @@ fun WebChatScreen(nav: Nav, appId: String) {
                         webViewClient = object : WebViewClient() {
                             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                 canGoBack = view?.canGoBack() == true
+                            }
+
+                            // 구글 로그인 페이지로 가려 하면 막히기 전에 안내 (구글은 앱 안 화면 로그인을 차단)
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                if (isGoogleSignIn(request?.url?.toString())) { googleBlocked = true; return true }
+                                return false
                             }
                         }
                         webChromeClient = object : WebChromeClient() {
@@ -190,6 +262,7 @@ fun WebChatScreen(nav: Nav, appId: String) {
         }
     }
 }
+
 
 @Composable
 private fun LaunchedOnce(key: Any?, block: () -> Unit) {

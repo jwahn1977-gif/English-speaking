@@ -93,3 +93,45 @@ Start now with a short greeting in character.
 
     const val TUTOR_END = "END"
 }
+
+/** 구글 계정 로그인 페이지인지 (앱 안 화면에서는 구글이 로그인을 막는다) */
+fun isGoogleSignIn(url: String?): Boolean {
+    val host = runCatching { Uri.parse(url).host }.getOrNull().orEmpty()
+    return host == "accounts.google.com" || host.endsWith(".accounts.google.com")
+}
+
+/** 로그인 도움말: 비밀번호 찾기 주소와 안내 */
+object LoginHelp {
+    const val GOOGLE_RECOVERY = "https://accounts.google.com/signin/recovery"
+    const val OPENAI_RESET = "https://chatgpt.com/auth/login"
+    const val CLAUDE_LOGIN = "https://claude.ai/login"
+
+    fun note(app: SubApp): String = when (app) {
+        SubApp.CLAUDE -> "Claude는 비밀번호가 없어요. 이메일을 넣으면 오는 인증 코드·링크로 로그인해요. 구글 계정으로 가입했다면 'Chrome으로 열기'를 쓰세요."
+        SubApp.CHATGPT -> "ChatGPT 로그인 화면에서 이메일 입력 후 '비밀번호를 잊으셨나요?'를 누르면 재설정 메일이 와요. 구글 계정으로 가입했다면 'Chrome으로 열기'를 쓰세요."
+        SubApp.GEMINI -> "Gemini는 구글 계정으로만 로그인해요. 구글은 앱 안 화면 로그인을 막기 때문에 Chrome 창으로 열어요."
+    }
+
+    fun resetUrl(app: SubApp): String = when (app) {
+        SubApp.CLAUDE -> CLAUDE_LOGIN
+        SubApp.CHATGPT -> OPENAI_RESET
+        SubApp.GEMINI -> GOOGLE_RECOVERY
+    }
+}
+
+/**
+ * Chrome 창(맞춤 탭)으로 연다. 구글 로그인은 여기서 정상 동작하고, 로그인은 Chrome에 계속 남는다.
+ * Chrome이 없으면 기본 브라우저로 연다.
+ */
+fun openInChrome(context: Context, url: String) = onMain {
+    val uri = Uri.parse(url)
+    runCatching {
+        androidx.browser.customtabs.CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .build()
+            .apply { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            .launchUrl(context, uri)
+    }.recoverCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.onFailure { Toast.makeText(context, "브라우저를 열 수 없어요.", Toast.LENGTH_LONG).show() }
+}
