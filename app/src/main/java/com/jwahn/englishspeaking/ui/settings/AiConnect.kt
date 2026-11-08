@@ -70,7 +70,7 @@ fun OpenRouterLoginCard(onConnected: () -> Unit = {}) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("⭐ 추천: 웹 로그인으로 연결", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text("API 연결: 웹 로그인 (앱 안에서 바로 대화)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
                 "브라우저에서 OpenRouter에 로그인(구글 계정 가능)하면 자동으로 연결돼요. 키를 복사할 필요가 없고, " +
                     "하나의 계정으로 Claude·ChatGPT·Gemini 모델을 모두 고를 수 있어요. 사용한 만큼 충전 금액에서 빠지며, 이름에 ':free'가 붙은 무료 모델도 있어요.",
@@ -156,4 +156,43 @@ fun ClipboardKeyWatcher(p: Provider, waiting: Boolean, onKey: (String) -> Unit) 
 fun WebKeyButton(link: String, onOpened: () -> Unit) {
     val context = LocalContext.current
     OutlinedButton(onClick = { onOpened(); openUrl(context, link) }) { Text("웹에서 로그인하고 키 받기") }
+}
+
+/**
+ * 구독 계정(Claude Pro, ChatGPT Plus, Gemini)으로 쓰기.
+ * 공식 앱/사이트에 로그인해 두면, 앱이 수업 지시문을 그쪽으로 넘기고 결과를 복사해 가져온다.
+ */
+@Composable
+fun SubscriptionLoginCard() {
+    val c = LocalContainer.current
+    val s by c.settings.state.collectAsState()
+    val context = LocalContext.current
+    val current = com.jwahn.englishspeaking.ui.handoff.SubApp.of(s.subscriptionApp)
+    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("구독 계정으로 로그인 (Claude · ChatGPT · Gemini)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "이미 쓰는 Claude Pro, ChatGPT Plus, Gemini 계정으로 공부해요. 아래에서 로그인해 두면, AI 튜터와 단어·패턴 만들기를 누를 때 " +
+                    "그 앱으로 수업 지시문을 넘겨 줘요. 결과는 복사해서 가져오면 복습에 들어가요. 추가 요금이 없어요.\n" +
+                    "※ 각 회사가 구독 계정을 다른 앱의 AI 엔진으로 쓰는 것을 허용하지 않아, 대화는 공식 앱에서 해요.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            com.jwahn.englishspeaking.ui.handoff.SubApp.entries.forEach { app ->
+                val using = current == app
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            c.settings.update { it.copy(subscriptionApp = app.id) }
+                            openUrl(context, app.loginUrl)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("${app.label} 로그인") }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (using) "✅ 사용 중" else "", Modifier.width(72.dp))
+                }
+            }
+            if (current != null) TextButton(onClick = { c.settings.update { it.copy(subscriptionApp = "") } }) { Text("구독 계정 사용 해제") }
+        }
+    }
 }

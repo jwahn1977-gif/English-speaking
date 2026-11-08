@@ -119,6 +119,9 @@ fun SettingsScreen(nav: Nav) {
 
             SectionTitle("AI 연결")
             Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SubscriptionLoginCard()
+            Text("앱 안에서 바로 대화·교정·자동 저장까지 하려면 아래 'API 연결'을 쓰세요.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OpenRouterLoginCard()
             if (s.hasKey(Provider.OPENROUTER)) ProviderCard(Provider.OPENROUTER, "")
             var advanced by remember { mutableStateOf(s.connectedProviders.any { it != Provider.OPENROUTER }) }

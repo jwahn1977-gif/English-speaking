@@ -76,6 +76,7 @@ val categories = linkedMapOf(
 fun TutorScreen(nav: Nav) {
     val c = LocalContainer.current
     val scenarios by c.db.tutor().scenarios().collectAsState(initial = emptyList())
+    val settings by c.settings.state.collectAsState()
     val recent by c.db.tutor().recentConversations(15).collectAsState(initial = emptyList())
     var cat by rememberSaveable { mutableStateOf("ROLEPLAY") }
     var deleteTarget by remember { mutableStateOf<ScenarioEntity?>(null) }
@@ -102,7 +103,7 @@ fun TutorScreen(nav: Nav) {
                 items(list, key = { it.id }) { s ->
                     Card(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
+                            .combinedClickable(onClickLabel = "대화 시작: ${s.title}", onClick = { if (settings.subscriptionOnly) nav.handoffTutor(s.id) else nav.chat(s.id) }, onLongClick = { if (!s.builtin) deleteTarget = s }),
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(s.emoji, fontSize = 32.sp)

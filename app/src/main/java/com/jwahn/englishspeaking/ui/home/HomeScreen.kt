@@ -112,7 +112,7 @@ fun HomeScreen(nav: Nav) {
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (!settings.anyConnected) {
+            if (!settings.anyConnected && settings.subscriptionApp.isBlank()) {
                 Card(
                     Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClickLabel = "AI 연결 설정 열기") { nav.settings() },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),

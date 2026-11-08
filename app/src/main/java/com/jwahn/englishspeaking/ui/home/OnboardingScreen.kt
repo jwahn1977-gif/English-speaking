@@ -123,6 +123,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             else -> {
                 Text("AI 선생님 연결 (선택)", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text("AI를 연결하면 대화 연습, 단어·패턴 만들기, 뉴스 번역을 쓸 수 있어요. 왕초보 과정, 단어장, 복습은 연결하지 않아도 돼요.")
+                com.jwahn.englishspeaking.ui.settings.SubscriptionLoginCard()
                 OpenRouterLoginCard()
                 Text(PRIVACY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("회사별 키로 직접 연결하려면 나중에 설정 > AI 연결에서 할 수 있어요.",
@@ -135,7 +136,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             Spacer(Modifier.weight(1f))
             if (step < 3) Button(onClick = { step++ }, modifier = Modifier.heightIn(min = 52.dp)) { Text("다음") }
             else Button(onClick = ::finish, modifier = Modifier.heightIn(min = 52.dp)) {
-                Text(if (s.anyConnected) "시작하기" else "AI 없이 먼저 시작하기")
+                Text(if (s.anyConnected || s.subscriptionApp.isNotBlank()) "시작하기" else "AI 없이 먼저 시작하기")
             }
         }
     }

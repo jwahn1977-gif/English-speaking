@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.jwahn.englishspeaking.App
@@ -145,7 +146,9 @@ class AppSmokeTest {
         waitText(text, substring)
         val node = rule.onAllNodesWithText(text, substring = substring).onFirst()
         runCatching { node.performScrollTo() }
-        node.performClick()
+        // 화면 밖에 걸쳐 있어도 확실히 누르도록 클릭 동작을 직접 실행
+        runCatching { node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) }
+            .onFailure { node.performClick() }
         rule.waitForIdle()
     }
 
@@ -354,5 +357,41 @@ class AppSmokeTest {
         clickText("아주 크게")
         assertEquals(1.4f, container.settings.current.fontScale)
         waitText("웹 로그인으로 연결하기")
+    }
+
+    /** 구독 계정(공식 앱)으로: 지시문 넘기기 → 결과 복사 → 가져와서 저장 */
+    @Test
+    fun subscription_login_handoff_and_import() {
+        passOnboarding()
+        tab("홈")
+        rule.onNodeWithContentDescription("설정").performClick()
+        clickText("Claude 로그인")
+        val shadowApp = org.robolectric.Shadows.shadowOf(rule.activity.application)
+        assertEquals("https://claude.ai/login", shadowApp.nextStartedActivity?.data?.toString())
+        assertEquals("CLAUDE", container.settings.current.subscriptionApp)
+        rule.activity.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+
+        tab("AI 튜터")
+        clickText("카페에서 주문하기")
+        clickText("Claude에서 대화 시작하기")
+        rule.waitUntil(10_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            shadowApp.peekNextStartedActivity() != null
+        }
+        val opened = shadowApp.nextStartedActivity?.data?.toString().orEmpty()
+        assertTrue(opened, opened.startsWith("https://claude.ai/new?q="))
+        val cm = rule.activity.getSystemService(android.content.ClipboardManager::class.java)
+        assertTrue(cm.primaryClip!!.getItemAt(0).text.toString().contains("role-play"))
+
+        // Claude가 END 후에 준 마지막 답을 복사했다고 가정
+        val reply = "잘했어요! 고칠 점: ...\n```json\n" +
+            "{\"patterns\":[{\"pattern\":\"Could I get ~?\",\"meaning_ko\":\"~ 주실 수 있나요?\",\"example_en\":\"Could I get a latte?\",\"example_ko\":\"라테 주실 수 있나요?\"}]," +
+            "\"words\":[{\"word\":\"decaf\",\"ipa\":\"ˈdiːkæf\",\"meaning_ko\":\"디카페인 커피\",\"example_en\":\"A decaf, please.\",\"example_ko\":\"디카페인 주세요.\"}]}\n```"
+        rule.activity.runOnUiThread { cm.setPrimaryClip(android.content.ClipData.newPlainText("r", reply)) }
+        clickText("📋 복사한 결과 가져오기")
+        waitText("Could I get ", substring = true)
+        clickText("모두 저장")
+        rule.waitUntil(10_000) { runBlocking { container.db.patterns().byTemplate("Could I get ~?") != null } }
+        runBlocking { assertNotNull(container.db.vocab().findWord("decaf")) }
     }
 }

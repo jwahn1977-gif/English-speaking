@@ -100,6 +100,7 @@ class Nav(private val nav: NavHostController) {
     }
     fun feeds() = go { nav.navigate("feeds") }
     fun today() = go { nav.navigate("today") }
+    fun handoffTutor(scenarioId: Long) = go { nav.navigate("handoff/$scenarioId") }
     fun finishOnboarding() = go {
         nav.navigate("home") { popUpTo("onboarding") { inclusive = true } }
     }
@@ -132,6 +133,9 @@ fun AppRoot(container: AppContainer) {
             NavHost(nav, startDestination = start, modifier = Modifier.padding(pad)) {
                 composable("onboarding") { OnboardingScreen(onDone = n::finishOnboarding) }
                 composable("today") { TodayScreen(n) }
+                composable("handoff/{sid}", arguments = listOf(navArgument("sid") { type = NavType.LongType })) { e ->
+                    com.jwahn.englishspeaking.ui.handoff.HandoffTutorScreen(n, e.arguments!!.getLong("sid"))
+                }
                 composable("home") { HomeScreen(n) }
                 composable("tutor") { TutorScreen(n) }
                 composable("vocab") { VocabScreen(n) }

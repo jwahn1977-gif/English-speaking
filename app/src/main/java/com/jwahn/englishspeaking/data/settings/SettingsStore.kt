@@ -52,12 +52,16 @@ data class AppSettings(
     val silentMode: Boolean = false,
     val dailyAiLimit: Int = 0, // 0 = 제한 없음
     val ttsVoice: String = "",
+    /** 구독 계정으로 쓰는 공식 앱: "", CLAUDE, CHATGPT, GEMINI */
+    val subscriptionApp: String = "",
 ) {
     fun key(p: Provider) = keys[p].orEmpty()
     fun model(p: Provider) = models[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
     fun hasKey(p: Provider) = key(p).isNotBlank()
     val connectedProviders: List<Provider> get() = Provider.entries.filter { hasKey(it) }
     val anyConnected: Boolean get() = connectedProviders.isNotEmpty()
+    /** API는 없고 구독 계정(공식 앱)으로만 쓰는 상태 */
+    val subscriptionOnly: Boolean get() = !anyConnected && subscriptionApp.isNotBlank()
     /** 왕초보·어린이처럼 도움이 많이 필요한 학습자 */
     val isBeginner: Boolean get() = learner == Learner.KIDS || learner == Learner.STARTER || learner == Learner.BASIC
 }
@@ -121,6 +125,7 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             silentMode = p.getBoolean("silent_mode", false),
             dailyAiLimit = p.getInt("daily_ai_limit", 0),
             ttsVoice = p.getString("tts_voice", "") ?: "",
+            subscriptionApp = p.getString("subscription_app", "") ?: "",
         )
     }
 
@@ -149,6 +154,7 @@ class SettingsStore(context: Context, val profileId: String = "default") {
             putBoolean("silent_mode", s.silentMode)
             putInt("daily_ai_limit", s.dailyAiLimit)
             putString("tts_voice", s.ttsVoice)
+            putString("subscription_app", s.subscriptionApp)
         }.apply()
         _state.value = s
     }

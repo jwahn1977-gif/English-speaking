@@ -272,6 +272,13 @@ fun PatternGenScreen(nav: Nav) {
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 ) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(6.dp)); Text("패턴 만들기") }
+                val st by c.settings.state.collectAsState()
+                if (st.subscriptionApp.isNotBlank()) {
+                    com.jwahn.englishspeaking.ui.handoff.SubscriptionGenerate(
+                        prompt = { if (topic.isBlank()) null else Prompts.patternSet(topic, count, levelMap.getValue(level)) },
+                        onImport = { im -> drafts = im.patterns; savedAll = false; error = null },
+                    )
+                }
                 if (loading) Loading()
                 error?.let { ErrorCard(it, onSettings = nav::settings) }
                 if (drafts.isNotEmpty()) Button(
